@@ -1,9 +1,9 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.remotemanagement.app",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "远程管理系统",
   "directories": {
     "output": "release/${version}"
   },
