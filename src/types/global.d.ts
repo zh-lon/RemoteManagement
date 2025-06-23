@@ -5,14 +5,26 @@ interface ElectronAPI {
   // 文件操作
   getUserDataPath(): Promise<string>;
   readFile(dir: string, fileName: string): Promise<string>;
-  writeFile(dir: string, fileName: string, data: string): Promise<void>;
-  
+  writeFile(
+    dir: string,
+    fileName: string,
+    data: string
+  ): Promise<{ success: boolean; error?: string }>;
+
   // 文件对话框
-  selectFile(filters?: Array<{ name: string; extensions: string[] }>): Promise<string | null>;
-  selectSavePath(defaultName?: string, filters?: Array<{ name: string; extensions: string[] }>): Promise<string | null>;
-  
+  selectFile(
+    filters?: Array<{ name: string; extensions: string[] }>
+  ): Promise<string | null>;
+  selectSavePath(
+    defaultName?: string,
+    filters?: Array<{ name: string; extensions: string[] }>
+  ): Promise<string | null>;
+
   // 程序启动
-  launchProgram(program: string, args: string[]): Promise<{ success: boolean; error?: string }>;
+  launchProgram(
+    program: string,
+    args: string[]
+  ): Promise<{ success: boolean; error?: string }>;
   checkProgram(program: string): Promise<boolean>;
 }
 

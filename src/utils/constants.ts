@@ -20,7 +20,7 @@ export const DEFAULT_CLIENT_CONFIGS: Record<string, ClientConfig> = {
     executable: "mstsc",
     path: "mstsc.exe",
     enabled: true,
-    arguments: "/v:{host}:{port} /u:{username} /p:{password}",
+    arguments: "/v:{host}:{port}",
   },
 
   // SSH 客户端

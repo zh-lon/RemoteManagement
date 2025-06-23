@@ -172,6 +172,160 @@ export class ConnectionService {
   }
 
   /**
+   * 创建RDP配置文件
+   */
+  private async createRDPFile(
+    connection: RDPConnection
+  ): Promise<string | null> {
+    try {
+      console.log("开始创建RDP配置文件，连接信息:", {
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+        domain: connection.domain,
+      });
+
+      // 检查Electron API是否可用
+      if (!window.electronAPI) {
+        console.error("Electron API不可用");
+        return null;
+      }
+
+      // 生成临时文件名
+      const timestamp = Date.now();
+      const fileName = `temp_rdp_${timestamp}.rdp`;
+      console.log("生成RDP文件名:", fileName);
+
+      // 构建RDP文件内容
+      let rdpContent = `screen mode id:i:2
+use multimon:i:0
+desktopwidth:i:1024
+desktopheight:i:768
+session bpp:i:32
+winposstr:s:0,3,0,0,800,600
+compression:i:1
+keyboardhook:i:2
+audiocapturemode:i:0
+videoplaybackmode:i:1
+connection type:i:7
+networkautodetect:i:1
+bandwidthautodetect:i:1
+displayconnectionbar:i:1
+enableworkspacereconnect:i:0
+disable wallpaper:i:0
+allow font smoothing:i:0
+allow desktop composition:i:0
+disable full window drag:i:1
+disable menu anims:i:1
+disable themes:i:0
+disable cursor setting:i:0
+bitmapcachepersistenable:i:1
+full address:s:${connection.host}:${connection.port}
+audiomode:i:0
+redirectprinters:i:1
+redirectcomports:i:0
+redirectsmartcards:i:1
+redirectclipboard:i:1
+redirectposdevices:i:0
+autoreconnection enabled:i:1
+authentication level:i:2
+prompt for credentials:i:0
+negotiate security layer:i:1
+remoteapplicationmode:i:0
+alternate shell:s:
+shell working directory:s:
+gatewayhostname:s:
+gatewayusagemethod:i:4
+gatewaycredentialssource:i:4
+gatewayprofileusagemethod:i:0
+promptcredentialonce:i:0
+gatewaybrokeringtype:i:0
+use redirection server name:i:0
+rdgiskdcproxy:i:0
+kdcproxyname:s:`;
+
+      // 添加用户名（如果提供）
+      if (connection.username) {
+        rdpContent += `\nusername:s:${connection.username}`;
+        console.log("添加用户名到RDP文件:", connection.username);
+      }
+
+      // 添加域名（如果提供）
+      if (connection.domain) {
+        rdpContent += `\ndomain:s:${connection.domain}`;
+        console.log("添加域名到RDP文件:", connection.domain);
+      }
+
+      // 添加分辨率设置
+      if (connection.resolution && connection.resolution !== "fullscreen") {
+        const [width, height] = connection.resolution.split("x");
+        rdpContent += `\ndesktopwidth:i:${width}`;
+        rdpContent += `\ndesktopheight:i:${height}`;
+        console.log("添加分辨率设置:", connection.resolution);
+      } else if (connection.resolution === "fullscreen") {
+        rdpContent += `\nscreen mode id:i:2`;
+        console.log("设置为全屏模式");
+      }
+
+      // 添加颜色深度
+      if (connection.colorDepth) {
+        rdpContent += `\nsession bpp:i:${connection.colorDepth}`;
+        console.log("添加颜色深度:", connection.colorDepth);
+      }
+
+      // 添加其他设置
+      if (connection.enableClipboard !== undefined) {
+        rdpContent += `\nredirectclipboard:i:${
+          connection.enableClipboard ? 1 : 0
+        }`;
+      }
+
+      if (connection.enableDrives !== undefined) {
+        rdpContent += `\nredirectdrives:i:${connection.enableDrives ? 1 : 0}`;
+      }
+
+      if (connection.enablePrinters !== undefined) {
+        rdpContent += `\nredirectprinters:i:${
+          connection.enablePrinters ? 1 : 0
+        }`;
+      }
+
+      if (connection.enableSound !== undefined) {
+        rdpContent += `\naudiomode:i:${connection.enableSound ? 0 : 2}`;
+      }
+
+      console.log("RDP文件内容长度:", rdpContent.length);
+
+      // 获取用户数据路径
+      const userDataPath = await window.electronAPI.getUserDataPath();
+      console.log("用户数据路径:", userDataPath);
+
+      // 保存RDP文件
+      console.log("开始保存RDP文件...");
+      const result = await window.electronAPI.writeFile(
+        "temp",
+        fileName,
+        rdpContent
+      );
+
+      console.log("RDP文件保存结果:", result);
+
+      if (result?.success) {
+        // 返回完整路径
+        const fullPath = `${userDataPath}/temp/${fileName}`;
+        console.log("RDP文件创建成功，路径:", fullPath);
+        return fullPath;
+      } else {
+        console.error("RDP文件保存失败:", result?.error);
+        return null;
+      }
+    } catch (error) {
+      console.error("创建RDP文件异常:", error);
+      return null;
+    }
+  }
+
+  /**
    * 为SSH连接启动SFTP客户端
    */
   public async connectSftp(
@@ -233,8 +387,36 @@ export class ConnectionService {
         };
       }
 
+      console.log("开始RDP连接:", {
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+      });
+
+      // 检查是否支持RDP文件创建
+      if (window.electronAPI?.writeFile) {
+        console.log("尝试使用RDP文件方式连接...");
+        // 创建临时RDP文件
+        const rdpFilePath = await this.createRDPFile(connection);
+        if (rdpFilePath) {
+          console.log("RDP文件创建成功，启动连接...");
+          // 使用RDP文件启动连接
+          const result = await this.launchClientWithConfig(
+            clientConfig,
+            connection,
+            [rdpFilePath]
+          );
+          return result;
+        } else {
+          console.warn("RDP文件创建失败，使用基本连接方式...");
+        }
+      }
+
+      // 回退到基本连接方式（仅主机和端口）
+      console.log("使用基本mstsc连接方式...");
       return await this.launchClientWithConfig(clientConfig, connection);
     } catch (error) {
+      console.error("RDP连接失败:", error);
       return {
         success: false,
         error: "RDP连接失败",
@@ -278,20 +460,24 @@ export class ConnectionService {
    */
   private async launchClientWithConfig(
     clientConfig: ClientConfig,
-    connection: ConnectionItem
+    connection: ConnectionItem,
+    customArgs?: string[]
   ): Promise<OperationResult> {
     try {
-      // 解析参数模板
-      const args = this.parseArguments(
-        clientConfig.arguments || "",
-        connection
-      );
+      // 如果提供了自定义参数，使用自定义参数；否则解析参数模板
+      const args =
+        customArgs ||
+        this.parseArguments(clientConfig.arguments || "", connection);
 
       // 调试信息：记录启动参数
       console.log(`启动客户端: ${clientConfig.name}`);
       console.log(`可执行文件路径: ${clientConfig.path}`);
-      console.log(`参数模板: ${clientConfig.arguments}`);
-      console.log(`解析后的参数:`, args);
+      if (customArgs) {
+        console.log(`使用自定义参数:`, args);
+      } else {
+        console.log(`参数模板: ${clientConfig.arguments}`);
+        console.log(`解析后的参数:`, args);
+      }
       console.log(`连接信息:`, {
         host: connection.host,
         port: connection.port,
@@ -300,8 +486,17 @@ export class ConnectionService {
         type: connection.type,
       });
 
+      // 检查Electron API是否可用
+      if (!window.electronAPI?.launchProgram) {
+        console.error("Electron API launchProgram 方法不可用");
+        return {
+          success: false,
+          error: "系统API不可用，无法启动客户端",
+        };
+      }
+
       // 启动客户端
-      const result = await window.electronAPI?.launchProgram(
+      const result = await window.electronAPI.launchProgram(
         clientConfig.path,
         args
       );
@@ -321,6 +516,7 @@ export class ConnectionService {
         };
       }
     } catch (error) {
+      console.error("启动客户端异常:", error);
       return {
         success: false,
         error: `启动${clientConfig.name}失败`,
