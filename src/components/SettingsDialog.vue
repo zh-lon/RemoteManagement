@@ -12,39 +12,9 @@
         <ClientConfigManager />
       </el-tab-pane>
 
-      <!-- 客户端状态 -->
-      <el-tab-pane label="客户端状态" name="status">
-        <ClientStatus />
-      </el-tab-pane>
-
-      <!-- 连接测试 -->
-      <el-tab-pane label="连接测试" name="test">
-        <ConnectionTester />
-      </el-tab-pane>
-
-      <!-- 配置验证 -->
-      <el-tab-pane label="配置验证" name="validator">
-        <ConfigValidator />
-      </el-tab-pane>
-
-      <!-- 存储调试 -->
-      <el-tab-pane label="存储调试" name="storage">
-        <StorageDebugger />
-      </el-tab-pane>
-
-      <!-- 简单存储测试 -->
-      <el-tab-pane label="简单测试" name="simple">
-        <SimpleStorageTest />
-      </el-tab-pane>
-
       <!-- 密码恢复 -->
       <el-tab-pane label="密码恢复" name="recovery">
         <PasswordRecovery />
-      </el-tab-pane>
-
-      <!-- 密码调试 -->
-      <el-tab-pane label="密码调试" name="password-debug">
-        <PasswordDebugger />
       </el-tab-pane>
 
       <!-- 应用设置 -->
@@ -198,14 +168,8 @@
 import { ref, reactive, watch, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { Monitor } from "@element-plus/icons-vue";
-import ClientStatus from "./ClientStatus.vue";
 import ClientConfigManager from "./ClientConfigManager.vue";
-import ConnectionTester from "./ConnectionTester.vue";
-import ConfigValidator from "./ConfigValidator.vue";
-import StorageDebugger from "./StorageDebugger.vue";
-import SimpleStorageTest from "./SimpleStorageTest.vue";
 import PasswordRecovery from "./PasswordRecovery.vue";
-import PasswordDebugger from "./PasswordDebugger.vue";
 import { AppSettings } from "@/types/connection";
 import {
   DEFAULT_SETTINGS,

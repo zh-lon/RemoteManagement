@@ -33,64 +33,6 @@ let win: BrowserWindow | null;
 function createMenu() {
   const template = [
     {
-      label: "文件",
-      submenu: [
-        {
-          label: "新建",
-          accelerator: "CmdOrCtrl+N",
-          click: () => {
-            // 新建文件逻辑
-          },
-        },
-        {
-          label: "打开",
-          accelerator: "CmdOrCtrl+O",
-          click: () => {
-            // 打开文件逻辑
-          },
-        },
-        { type: "separator" },
-        {
-          label: "退出",
-          accelerator: process.platform === "darwin" ? "Cmd+Q" : "Ctrl+Q",
-          click: () => {
-            app.quit();
-          },
-        },
-      ],
-    },
-    {
-      label: "编辑",
-      submenu: [
-        {
-          label: "撤销",
-          accelerator: "CmdOrCtrl+Z",
-          role: "undo",
-        },
-        {
-          label: "重做",
-          accelerator: "Shift+CmdOrCtrl+Z",
-          role: "redo",
-        },
-        { type: "separator" },
-        {
-          label: "剪切",
-          accelerator: "CmdOrCtrl+X",
-          role: "cut",
-        },
-        {
-          label: "复制",
-          accelerator: "CmdOrCtrl+C",
-          role: "copy",
-        },
-        {
-          label: "粘贴",
-          accelerator: "CmdOrCtrl+V",
-          role: "paste",
-        },
-      ],
-    },
-    {
       label: "视图",
       submenu: [
         {
@@ -115,62 +57,14 @@ function createMenu() {
             win?.webContents.toggleDevTools();
           },
         },
-        { type: "separator" },
-        {
-          label: "实际大小",
-          accelerator: "CmdOrCtrl+0",
-          role: "resetZoom",
-        },
-        {
-          label: "放大",
-          accelerator: "CmdOrCtrl+Plus",
-          role: "zoomIn",
-        },
-        {
-          label: "缩小",
-          accelerator: "CmdOrCtrl+-",
-          role: "zoomOut",
-        },
-        { type: "separator" },
-        {
-          label: "全屏",
-          accelerator: process.platform === "darwin" ? "Ctrl+Cmd+F" : "F11",
-          role: "togglefullscreen",
-        },
       ],
     },
     {
-      label: "窗口",
-      submenu: [
-        {
-          label: "最小化",
-          accelerator: "CmdOrCtrl+M",
-          role: "minimize",
-        },
-        {
-          label: "关闭",
-          accelerator: "CmdOrCtrl+W",
-          role: "close",
-        },
-      ],
-    },
-    {
-      label: "工具",
-      submenu: [
-        {
-          label: "客户端状态",
-          click: () => {
-            win?.webContents.send("show-client-status");
-          },
-        },
-        {
-          label: "设置",
-          accelerator: "CmdOrCtrl+,",
-          click: () => {
-            win?.webContents.send("show-settings");
-          },
-        },
-      ],
+      label: "设置",
+      accelerator: "CmdOrCtrl+,",
+      click: () => {
+        win?.webContents.send("show-settings");
+      },
     },
     {
       label: "帮助",
@@ -178,7 +72,7 @@ function createMenu() {
         {
           label: "关于远程管理系统",
           click: () => {
-            // 显示关于对话框
+            win?.webContents.send("show-settings");
           },
         },
       ],

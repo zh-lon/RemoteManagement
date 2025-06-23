@@ -57,18 +57,10 @@ onMounted(async () => {
   // 初始化连接服务
   await connectionService.initializeClients();
 
-  // 测试加密解密功能
-  testEncryptionDecryption();
-
   // 监听菜单事件
   if (window.ipcRenderer) {
     window.ipcRenderer.on("show-settings", () => {
       settingsVisible.value = true;
-    });
-
-    window.ipcRenderer.on("show-client-status", () => {
-      settingsVisible.value = true;
-      // 可以在这里设置默认标签页为客户端状态
     });
   }
 });
@@ -95,78 +87,11 @@ const initializeApp = async () => {
 
 const loadConnections = async () => {
   try {
-    console.log("开始加载连接配置...");
-
-    // 检查localStorage中的原始数据
-    const rawData = localStorage.getItem("connections.json");
-    if (rawData) {
-      console.log("localStorage原始数据长度:", rawData.length);
-      try {
-        const parsed = JSON.parse(rawData);
-        console.log("localStorage解析后的数据:", parsed);
-
-        // 检查原始密码数据
-        const checkRawPasswords = (groups: any[]) => {
-          groups.forEach((group) => {
-            if (group.children) {
-              group.children.forEach((child: any) => {
-                if (child.type && child.password !== undefined) {
-                  console.log(`原始数据中连接 ${child.name} 的密码:`, {
-                    length: child.password ? child.password.length : 0,
-                    value: child.password
-                      ? child.password.length > 20
-                        ? "(加密数据)"
-                        : child.password
-                      : "(空)",
-                  });
-                }
-                if (child.children) {
-                  checkRawPasswords([child]);
-                }
-              });
-            }
-          });
-        };
-
-        if (parsed.groups) {
-          checkRawPasswords(parsed.groups);
-        }
-      } catch (e) {
-        console.error("解析localStorage数据失败:", e);
-      }
-    } else {
-      console.log("localStorage中没有连接数据");
-    }
-
     const result = await storageService.loadConnections();
-    console.log("存储服务加载结果:", result);
 
     if (result.success && result.data) {
-      console.log("加载的连接组数据:", result.data.groups);
-
-      // 检查密码字段
-      const checkPasswords = (groups: any[]) => {
-        groups.forEach((group) => {
-          if (group.children) {
-            group.children.forEach((child: any) => {
-              if (child.type && child.password !== undefined) {
-                console.log(
-                  `连接 ${child.name} 的密码:`,
-                  child.password ? "***" : "(空)"
-                );
-              }
-              if (child.children) {
-                checkPasswords([child]);
-              }
-            });
-          }
-        });
-      };
-
-      checkPasswords(result.data.groups);
       treeData.value = result.data.groups;
     } else {
-      console.log("未找到连接配置，创建默认分组");
       // 创建默认分组
       treeData.value = [
         {
@@ -457,38 +382,6 @@ const findGroupById = (id: string): ConnectionGroup | null => {
   }
 
   return null;
-};
-
-// 测试加密解密功能
-const testEncryptionDecryption = () => {
-  try {
-    console.log("=== 开始测试加密解密功能 ===");
-
-    const testPassword = "test123";
-    console.log("原始密码:", testPassword);
-
-    // 测试加密
-    const encrypted = encryptionService.encrypt(testPassword);
-    console.log("加密后:", encrypted, "长度:", encrypted.length);
-
-    // 测试解密
-    const decrypted = encryptionService.decrypt(encrypted);
-    console.log("解密后:", decrypted, "长度:", decrypted.length);
-
-    // 验证结果
-    const isMatch = testPassword === decrypted;
-    console.log("加密解密是否一致:", isMatch);
-
-    if (!isMatch) {
-      console.error("❌ 加密解密测试失败！");
-    } else {
-      console.log("✅ 加密解密测试成功！");
-    }
-
-    console.log("=== 加密解密功能测试完成 ===");
-  } catch (error) {
-    console.error("加密解密测试异常:", error);
-  }
 };
 </script>
 
