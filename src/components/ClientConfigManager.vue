@@ -83,8 +83,8 @@ import { ref, computed, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { RefreshLeft, Check, Warning } from "@element-plus/icons-vue";
 import ClientConfigPanel from "./ClientConfigPanel.vue";
-import { ClientConfig } from "@/types/connection";
-import { DEFAULT_CLIENT_CONFIGS } from "@/utils/constants";
+import { ClientConfig, AppSettings } from "@/types/connection";
+import { DEFAULT_CLIENT_CONFIGS, DEFAULT_SETTINGS } from "@/utils/constants";
 import { storageService } from "@/services/storage";
 import { connectionService } from "@/services/connection";
 
@@ -139,20 +139,45 @@ const telnetConfigs = computed(() => {
 });
 
 // 生命周期
-onMounted(() => {
-  loadConfigs();
+onMounted(async () => {
+  await loadConfigs();
+
+  // 如果有未保存的更改（比如使用了默认配置），立即保存
+  if (hasUnsavedChanges.value) {
+    console.log("检测到未保存的更改，立即保存默认配置...");
+    await autoSaveConfigs();
+  }
 });
 
 // 方法
 const loadConfigs = async () => {
   try {
+    console.log("开始加载客户端配置...");
     const result = await storageService.loadSettings();
-    if (result.success && result.data?.clientPaths) {
-      clientConfigs.value = { ...result.data.clientPaths };
+    console.log("加载设置结果:", result);
+
+    if (result.success) {
+      if (result.data?.clientPaths) {
+        console.log("找到客户端配置:", result.data.clientPaths);
+        clientConfigs.value = { ...result.data.clientPaths };
+      } else {
+        console.log("未找到客户端配置，使用默认配置");
+        clientConfigs.value = { ...DEFAULT_CLIENT_CONFIGS };
+        hasUnsavedChanges.value = true; // 标记需要保存
+      }
+    } else {
+      console.log("加载设置失败，使用默认配置");
+      clientConfigs.value = { ...DEFAULT_CLIENT_CONFIGS };
+      hasUnsavedChanges.value = true; // 标记需要保存
     }
+
+    console.log("最终客户端配置:", clientConfigs.value);
   } catch (error) {
     console.error("加载客户端配置失败:", error);
     ElMessage.error("加载客户端配置失败");
+    // 即使出错也要设置默认配置
+    clientConfigs.value = { ...DEFAULT_CLIENT_CONFIGS };
+    hasUnsavedChanges.value = true;
   }
 };
 
@@ -180,8 +205,9 @@ const autoSaveConfigs = async () => {
         return;
       }
 
-      // 更新客户端配置
-      const updatedSettings = {
+      // 更新客户端配置，确保所有必需属性都存在
+      const updatedSettings: AppSettings = {
+        ...DEFAULT_SETTINGS,
         ...settingsResult.data,
         clientPaths: clientConfigs.value,
       };
@@ -189,8 +215,9 @@ const autoSaveConfigs = async () => {
       // 保存设置
       const saveResult = await storageService.saveSettings(updatedSettings);
       if (saveResult.success) {
-        // 更新连接服务的配置
+        // 先更新连接服务的配置
         connectionService.updateClientConfigs(clientConfigs.value);
+        console.log("自动保存：已更新连接服务的配置:", clientConfigs.value);
         hasUnsavedChanges.value = false;
         console.log("客户端配置已自动保存");
       } else {
@@ -205,25 +232,101 @@ const autoSaveConfigs = async () => {
 const saveConfigs = async () => {
   saving.value = true;
   try {
+    console.log("开始保存客户端配置...");
+    console.log("当前客户端配置:", clientConfigs.value);
+
     // 获取当前设置
     const settingsResult = await storageService.loadSettings();
+    console.log("加载设置结果:", settingsResult);
+
     if (!settingsResult.success) {
-      throw new Error("无法加载当前设置");
+      throw new Error("无法加载当前设置: " + settingsResult.error);
     }
 
-    // 更新客户端配置
-    const updatedSettings = {
+    // 更新客户端配置，确保所有必需属性都存在
+    const updatedSettings: AppSettings = {
+      ...DEFAULT_SETTINGS,
       ...settingsResult.data,
       clientPaths: clientConfigs.value,
     };
 
+    console.log("更新后的设置:", updatedSettings);
+
     // 保存设置
     const saveResult = await storageService.saveSettings(updatedSettings);
+    console.log("保存结果:", saveResult);
+
     if (saveResult.success) {
-      // 更新连接服务的配置
+      // 先更新连接服务的配置
       connectionService.updateClientConfigs(clientConfigs.value);
+      console.log("已更新连接服务的配置:", clientConfigs.value);
       hasUnsavedChanges.value = false;
-      ElMessage.success("客户端配置保存成功");
+
+      // 验证保存是否成功
+      const verifyResult = await storageService.loadSettings();
+      console.log("验证加载结果:", verifyResult);
+
+      if (verifyResult.success && verifyResult.data?.clientPaths) {
+        console.log(
+          "验证保存结果 - 客户端配置:",
+          verifyResult.data.clientPaths
+        );
+
+        // 深度比较保存的配置是否与当前配置一致
+        const savedConfigs = verifyResult.data.clientPaths;
+        const currentConfigs = clientConfigs.value;
+
+        // 检查关键配置是否匹配
+        let configsMatch = true;
+        const mismatchDetails: string[] = [];
+
+        for (const [key, currentConfig] of Object.entries(currentConfigs)) {
+          const savedConfig = savedConfigs[key];
+          if (!savedConfig) {
+            configsMatch = false;
+            mismatchDetails.push(`缺少客户端: ${key}`);
+            continue;
+          }
+
+          // 类型断言确保类型安全
+          const current = currentConfig as ClientConfig;
+          const saved = savedConfig as ClientConfig;
+
+          // 检查关键属性
+          if (saved.path !== current.path) {
+            configsMatch = false;
+            mismatchDetails.push(
+              `${key}.path: 期望 "${current.path}", 实际 "${saved.path}"`
+            );
+          }
+          if (saved.enabled !== current.enabled) {
+            configsMatch = false;
+            mismatchDetails.push(
+              `${key}.enabled: 期望 ${current.enabled}, 实际 ${saved.enabled}`
+            );
+          }
+          if (saved.arguments !== current.arguments) {
+            configsMatch = false;
+            mismatchDetails.push(
+              `${key}.arguments: 期望 "${current.arguments}", 实际 "${saved.arguments}"`
+            );
+          }
+        }
+
+        if (configsMatch) {
+          console.log("✅ 配置验证成功：保存的配置与当前配置完全一致");
+          ElMessage.success("客户端配置保存成功并验证通过");
+        } else {
+          console.error("❌ 配置验证失败：保存的配置与当前配置不一致");
+          console.error("不一致详情:", mismatchDetails);
+          ElMessage.warning(
+            "配置已保存，但验证发现不一致：" + mismatchDetails.join("; ")
+          );
+        }
+      } else {
+        console.error("❌ 验证失败：无法加载保存的配置");
+        ElMessage.warning("配置可能已保存，但验证加载失败");
+      }
     } else {
       throw new Error(saveResult.error || "保存失败");
     }

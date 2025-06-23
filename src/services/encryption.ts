@@ -1,5 +1,5 @@
-import CryptoJS from 'crypto-js';
-import { ENCRYPTION_KEY_LENGTH, ENCRYPTION_IV_LENGTH } from '@/utils/constants';
+import CryptoJS from "crypto-js";
+import { ENCRYPTION_KEY_LENGTH, ENCRYPTION_IV_LENGTH } from "@/utils/constants";
 
 /**
  * 加密服务类
@@ -7,7 +7,7 @@ import { ENCRYPTION_KEY_LENGTH, ENCRYPTION_IV_LENGTH } from '@/utils/constants';
  */
 export class EncryptionService {
   private static instance: EncryptionService;
-  private masterKey: string = '';
+  private masterKey: string = "";
   private isInitialized: boolean = false;
 
   private constructor() {}
@@ -37,8 +37,8 @@ export class EncryptionService {
       }
       this.isInitialized = true;
     } catch (error) {
-      console.error('加密服务初始化失败:', error);
-      throw new Error('加密服务初始化失败');
+      console.error("加密服务初始化失败:", error);
+      throw new Error("加密服务初始化失败");
     }
   }
 
@@ -56,32 +56,35 @@ export class EncryptionService {
    */
   public encrypt(plaintext: string): string {
     if (!this.isReady()) {
-      throw new Error('加密服务未初始化');
+      throw new Error("加密服务未初始化");
     }
 
     if (!plaintext) {
-      return '';
+      return "";
     }
 
     try {
       // 生成随机IV
       const iv = CryptoJS.lib.WordArray.random(ENCRYPTION_IV_LENGTH);
-      
+
+      // 将密钥转换为WordArray
+      const keyWordArray = CryptoJS.enc.Hex.parse(this.masterKey);
+
       // 使用AES加密
-      const encrypted = CryptoJS.AES.encrypt(plaintext, this.masterKey, {
+      const encrypted = CryptoJS.AES.encrypt(plaintext, keyWordArray, {
         iv: iv,
         mode: CryptoJS.mode.CBC,
-        padding: CryptoJS.pad.Pkcs7
+        padding: CryptoJS.pad.Pkcs7,
       });
 
       // 将IV和密文组合
       const combined = iv.concat(encrypted.ciphertext);
-      
+
       // 返回Base64编码的结果
       return combined.toString(CryptoJS.enc.Base64);
     } catch (error) {
-      console.error('加密失败:', error);
-      throw new Error('加密失败');
+      console.error("加密失败:", error);
+      throw new Error("加密失败");
     }
   }
 
@@ -92,17 +95,17 @@ export class EncryptionService {
    */
   public decrypt(ciphertext: string): string {
     if (!this.isReady()) {
-      throw new Error('加密服务未初始化');
+      throw new Error("加密服务未初始化");
     }
 
     if (!ciphertext) {
-      return '';
+      return "";
     }
 
     try {
       // 解码Base64
       const combined = CryptoJS.enc.Base64.parse(ciphertext);
-      
+
       // 提取IV和密文
       const iv = CryptoJS.lib.WordArray.create(
         combined.words.slice(0, ENCRYPTION_IV_LENGTH / 4)
@@ -111,22 +114,25 @@ export class EncryptionService {
         combined.words.slice(ENCRYPTION_IV_LENGTH / 4)
       );
 
+      // 将密钥转换为WordArray
+      const keyWordArray = CryptoJS.enc.Hex.parse(this.masterKey);
+
       // 解密
       const decrypted = CryptoJS.AES.decrypt(
         { ciphertext: encrypted } as any,
-        this.masterKey,
+        keyWordArray,
         {
           iv: iv,
           mode: CryptoJS.mode.CBC,
-          padding: CryptoJS.pad.Pkcs7
+          padding: CryptoJS.pad.Pkcs7,
         }
       );
 
       // 转换为UTF-8字符串
       return decrypted.toString(CryptoJS.enc.Utf8);
     } catch (error) {
-      console.error('解密失败:', error);
-      throw new Error('解密失败');
+      console.error("解密失败:", error);
+      throw new Error("解密失败");
     }
   }
 
@@ -141,13 +147,13 @@ export class EncryptionService {
     sensitiveFields: (keyof T)[]
   ): T {
     const result = { ...obj };
-    
+
     for (const field of sensitiveFields) {
-      if (result[field] && typeof result[field] === 'string') {
+      if (result[field] && typeof result[field] === "string") {
         result[field] = this.encrypt(result[field] as string) as T[keyof T];
       }
     }
-    
+
     return result;
   }
 
@@ -162,19 +168,68 @@ export class EncryptionService {
     sensitiveFields: (keyof T)[]
   ): T {
     const result = { ...obj };
-    
+
     for (const field of sensitiveFields) {
-      if (result[field] && typeof result[field] === 'string') {
-        try {
-          result[field] = this.decrypt(result[field] as string) as T[keyof T];
-        } catch (error) {
-          console.warn(`解密字段 ${String(field)} 失败:`, error);
-          // 保持原值，可能是未加密的数据
+      if (result[field] && typeof result[field] === "string") {
+        const fieldValue = result[field] as string;
+
+        // 检查是否是加密数据（Base64格式且长度合理）
+        if (this.isEncryptedData(fieldValue)) {
+          try {
+            console.log(
+              `开始解密字段 ${String(field)}，加密值长度: ${fieldValue.length}`
+            );
+            const decrypted = this.decrypt(fieldValue);
+            console.log(
+              `解密字段 ${String(field)} 成功，解密后长度: ${
+                decrypted.length
+              }，内容: ${decrypted ? "***" : "(空)"}`
+            );
+            result[field] = decrypted as T[keyof T];
+          } catch (error) {
+            console.warn(`解密字段 ${String(field)} 失败:`, error);
+            // 如果解密失败，清空该字段而不是保持加密值
+            result[field] = "" as T[keyof T];
+          }
+        } else {
+          // 如果不是加密数据，保持原值（可能是明文密码）
+          console.log(
+            `字段 ${String(field)} 不是加密数据，原值长度: ${
+              fieldValue.length
+            }，保持原值`
+          );
         }
       }
     }
-    
+
     return result;
+  }
+
+  /**
+   * 检查字符串是否是加密数据
+   * @param data 要检查的字符串
+   * @returns 是否是加密数据
+   */
+  private isEncryptedData(data: string): boolean {
+    try {
+      // 检查是否是有效的Base64字符串
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
+        return false;
+      }
+
+      // 检查长度是否合理（加密数据通常比较长）
+      if (data.length < 20) {
+        return false;
+      }
+
+      // 尝试解码Base64
+      const decoded = CryptoJS.enc.Base64.parse(data);
+
+      // 检查解码后的长度是否合理（至少包含IV）
+      return decoded.words.length >= ENCRYPTION_IV_LENGTH / 4;
+    } catch (error) {
+      return false;
+    }
   }
 
   /**
@@ -184,12 +239,12 @@ export class EncryptionService {
    * @returns 哈希值
    */
   public hashPassword(password: string, salt?: string): string {
-    const saltToUse = salt || CryptoJS.lib.WordArray.random(128/8).toString();
+    const saltToUse = salt || CryptoJS.lib.WordArray.random(128 / 8).toString();
     const hash = CryptoJS.PBKDF2(password, saltToUse, {
-      keySize: 256/32,
-      iterations: 10000
+      keySize: 256 / 32,
+      iterations: 10000,
     });
-    return saltToUse + ':' + hash.toString();
+    return saltToUse + ":" + hash.toString();
   }
 
   /**
@@ -200,10 +255,10 @@ export class EncryptionService {
    */
   public verifyPassword(password: string, hash: string): boolean {
     try {
-      const [salt, storedHash] = hash.split(':');
+      const [salt, storedHash] = hash.split(":");
       const computedHash = CryptoJS.PBKDF2(password, salt, {
-        keySize: 256/32,
-        iterations: 10000
+        keySize: 256 / 32,
+        iterations: 10000,
       }).toString();
       return computedHash === storedHash;
     } catch (error) {
@@ -217,22 +272,25 @@ export class EncryptionService {
    * @param includeSymbols 是否包含特殊字符
    * @returns 随机密码
    */
-  public generateRandomPassword(length: number = 16, includeSymbols: boolean = true): string {
-    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const numbers = '0123456789';
-    const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
-    
+  public generateRandomPassword(
+    length: number = 16,
+    includeSymbols: boolean = true
+  ): string {
+    const lowercase = "abcdefghijklmnopqrstuvwxyz";
+    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const numbers = "0123456789";
+    const symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?";
+
     let charset = lowercase + uppercase + numbers;
     if (includeSymbols) {
       charset += symbols;
     }
-    
-    let password = '';
+
+    let password = "";
     for (let i = 0; i < length; i++) {
       password += charset.charAt(Math.floor(Math.random() * charset.length));
     }
-    
+
     return password;
   }
 
@@ -242,10 +300,10 @@ export class EncryptionService {
    * @returns 派生的密钥
    */
   private deriveKey(masterPassword: string): string {
-    const salt = 'RemoteManagementSystem'; // 固定盐值
+    const salt = "RemoteManagementSystem"; // 固定盐值
     const key = CryptoJS.PBKDF2(masterPassword, salt, {
       keySize: ENCRYPTION_KEY_LENGTH / 4,
-      iterations: 10000
+      iterations: 10000,
     });
     return key.toString();
   }
@@ -256,21 +314,71 @@ export class EncryptionService {
    */
   private async generateDefaultKey(): Promise<string> {
     try {
-      // 在Electron环境中，可以使用机器信息生成密钥
-      const machineInfo = [
-        navigator.userAgent,
+      // 使用更稳定的机器信息生成密钥
+      // 避免使用可能变化的信息如屏幕分辨率和userAgent
+      const stableMachineInfo = [
         navigator.platform,
-        screen.width.toString(),
-        screen.height.toString(),
-        new Date().getTimezoneOffset().toString()
-      ].join('|');
-      
-      const key = CryptoJS.SHA256(machineInfo).toString().substring(0, ENCRYPTION_KEY_LENGTH);
+        navigator.language,
+        new Date().getTimezoneOffset().toString(),
+        "RemoteManagementSystem-v1.0", // 版本标识
+      ].join("|");
+
+      console.log("生成默认密钥，机器信息:", stableMachineInfo);
+
+      const key = CryptoJS.SHA256(stableMachineInfo)
+        .toString()
+        .substring(0, ENCRYPTION_KEY_LENGTH);
+
+      // 存储密钥指纹用于验证
+      const keyFingerprint = CryptoJS.SHA256(key).toString().substring(0, 8);
+      localStorage.setItem("encryption-key-fingerprint", keyFingerprint);
+
       return key;
     } catch (error) {
       // 如果无法获取机器信息，使用固定密钥
-      console.warn('无法生成机器特定密钥，使用默认密钥');
-      return CryptoJS.SHA256('DefaultRemoteManagementKey').toString().substring(0, ENCRYPTION_KEY_LENGTH);
+      console.warn("无法生成机器特定密钥，使用固定密钥");
+      const fallbackKey = CryptoJS.SHA256("DefaultRemoteManagementKey-Fallback")
+        .toString()
+        .substring(0, ENCRYPTION_KEY_LENGTH);
+
+      // 存储回退密钥指纹
+      const keyFingerprint = CryptoJS.SHA256(fallbackKey)
+        .toString()
+        .substring(0, 8);
+      localStorage.setItem("encryption-key-fingerprint", keyFingerprint);
+
+      return fallbackKey;
+    }
+  }
+
+  /**
+   * 验证当前密钥是否与存储的指纹匹配
+   * @returns 是否匹配
+   */
+  public verifyKeyFingerprint(): boolean {
+    try {
+      const storedFingerprint = localStorage.getItem(
+        "encryption-key-fingerprint"
+      );
+      if (!storedFingerprint) {
+        return true; // 如果没有存储指纹，认为是首次使用
+      }
+
+      const currentFingerprint = CryptoJS.SHA256(this.masterKey)
+        .toString()
+        .substring(0, 8);
+      const matches = currentFingerprint === storedFingerprint;
+
+      if (!matches) {
+        console.warn("密钥指纹不匹配，可能需要重新生成密钥");
+        console.log("存储的指纹:", storedFingerprint);
+        console.log("当前指纹:", currentFingerprint);
+      }
+
+      return matches;
+    } catch (error) {
+      console.error("验证密钥指纹失败:", error);
+      return false;
     }
   }
 
@@ -280,17 +388,20 @@ export class EncryptionService {
    * @param newPassword 新密码
    * @returns 是否成功
    */
-  public async changeMasterPassword(oldPassword: string, newPassword: string): Promise<boolean> {
+  public async changeMasterPassword(
+    oldPassword: string,
+    newPassword: string
+  ): Promise<boolean> {
     try {
       const oldKey = this.deriveKey(oldPassword);
       if (oldKey !== this.masterKey) {
         return false;
       }
-      
+
       this.masterKey = this.deriveKey(newPassword);
       return true;
     } catch (error) {
-      console.error('更改主密码失败:', error);
+      console.error("更改主密码失败:", error);
       return false;
     }
   }
@@ -299,7 +410,7 @@ export class EncryptionService {
    * 清理敏感数据
    */
   public cleanup(): void {
-    this.masterKey = '';
+    this.masterKey = "";
     this.isInitialized = false;
   }
 }

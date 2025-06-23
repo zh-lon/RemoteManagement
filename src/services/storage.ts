@@ -1,21 +1,21 @@
-import { v4 as uuidv4 } from 'uuid';
-import { 
-  ConnectionConfig, 
-  ConnectionGroup, 
-  ConnectionItem, 
-  AppSettings, 
+import { v4 as uuidv4 } from "uuid";
+import {
+  ConnectionConfig,
+  ConnectionGroup,
+  ConnectionItem,
+  AppSettings,
   OperationResult,
   TreeNode,
   isConnectionGroup,
-  isConnectionItem
-} from '@/types/connection';
-import { encryptionService } from './encryption';
-import { 
-  DEFAULT_SETTINGS, 
-  DATA_FILE_NAME, 
+  isConnectionItem,
+} from "@/types/connection";
+import { encryptionService } from "./encryption";
+import {
+  DEFAULT_SETTINGS,
+  DATA_FILE_NAME,
   SETTINGS_FILE_NAME,
-  APP_VERSION 
-} from '@/utils/constants';
+  APP_VERSION,
+} from "@/utils/constants";
 
 /**
  * 本地数据存储服务
@@ -23,7 +23,7 @@ import {
  */
 export class StorageService {
   private static instance: StorageService;
-  private dataPath: string = '';
+  private dataPath: string = "";
   private isInitialized: boolean = false;
 
   private constructor() {}
@@ -48,18 +48,18 @@ export class StorageService {
         this.dataPath = await window.electronAPI.getUserDataPath();
       } else {
         // 开发环境使用localStorage
-        this.dataPath = 'localStorage';
+        this.dataPath = "localStorage";
       }
-      
+
       this.isInitialized = true;
-      
+
       // 确保加密服务已初始化
       if (!encryptionService.isReady()) {
         await encryptionService.initialize();
       }
     } catch (error) {
-      console.error('存储服务初始化失败:', error);
-      throw new Error('存储服务初始化失败');
+      console.error("存储服务初始化失败:", error);
+      throw new Error("存储服务初始化失败");
     }
   }
 
@@ -74,7 +74,7 @@ export class StorageService {
 
       let data: string | null = null;
 
-      if (this.dataPath === 'localStorage') {
+      if (this.dataPath === "localStorage") {
         // 开发环境使用localStorage
         data = localStorage.getItem(DATA_FILE_NAME);
       } else {
@@ -87,23 +87,44 @@ export class StorageService {
         const defaultConfig: ConnectionConfig = {
           version: APP_VERSION,
           groups: [],
-          settings: DEFAULT_SETTINGS
+          settings: DEFAULT_SETTINGS,
         };
         return { success: true, data: defaultConfig };
       }
 
       const config: ConnectionConfig = JSON.parse(data);
-      
+
+      // 验证加密密钥
+      if (!encryptionService.verifyKeyFingerprint()) {
+        console.warn("加密密钥不匹配，可能导致解密失败");
+      }
+
       // 解密敏感数据
-      config.groups = this.decryptGroups(config.groups);
+      try {
+        config.groups = this.decryptGroups(config.groups);
+        console.log("连接配置解密成功");
+      } catch (error) {
+        console.error("解密连接配置失败:", error);
+        // 如果解密失败，返回默认配置
+        const defaultConfig: ConnectionConfig = {
+          version: APP_VERSION,
+          groups: [],
+          settings: DEFAULT_SETTINGS,
+        };
+        return {
+          success: true,
+          data: defaultConfig,
+          message: "解密失败，已加载默认配置",
+        };
+      }
 
       return { success: true, data: config };
     } catch (error) {
-      console.error('加载连接配置失败:', error);
-      return { 
-        success: false, 
-        error: '加载连接配置失败',
-        message: error instanceof Error ? error.message : '未知错误'
+      console.error("加载连接配置失败:", error);
+      return {
+        success: false,
+        error: "加载连接配置失败",
+        message: error instanceof Error ? error.message : "未知错误",
       };
     }
   }
@@ -111,7 +132,9 @@ export class StorageService {
   /**
    * 保存连接配置
    */
-  public async saveConnections(config: ConnectionConfig): Promise<OperationResult> {
+  public async saveConnections(
+    config: ConnectionConfig
+  ): Promise<OperationResult> {
     try {
       if (!this.isInitialized) {
         await this.initialize();
@@ -120,12 +143,12 @@ export class StorageService {
       // 创建副本并加密敏感数据
       const configToSave: ConnectionConfig = {
         ...config,
-        groups: this.encryptGroups(config.groups)
+        groups: this.encryptGroups(config.groups),
       };
 
       const data = JSON.stringify(configToSave, null, 2);
 
-      if (this.dataPath === 'localStorage') {
+      if (this.dataPath === "localStorage") {
         // 开发环境使用localStorage
         localStorage.setItem(DATA_FILE_NAME, data);
       } else {
@@ -133,13 +156,13 @@ export class StorageService {
         await window.electronAPI.writeFile(this.dataPath, DATA_FILE_NAME, data);
       }
 
-      return { success: true, message: '保存成功' };
+      return { success: true, message: "保存成功" };
     } catch (error) {
-      console.error('保存连接配置失败:', error);
-      return { 
-        success: false, 
-        error: '保存连接配置失败',
-        message: error instanceof Error ? error.message : '未知错误'
+      console.error("保存连接配置失败:", error);
+      return {
+        success: false,
+        error: "保存连接配置失败",
+        message: error instanceof Error ? error.message : "未知错误",
       };
     }
   }
@@ -155,10 +178,13 @@ export class StorageService {
 
       let data: string | null = null;
 
-      if (this.dataPath === 'localStorage') {
+      if (this.dataPath === "localStorage") {
         data = localStorage.getItem(SETTINGS_FILE_NAME);
       } else {
-        data = await window.electronAPI.readFile(this.dataPath, SETTINGS_FILE_NAME);
+        data = await window.electronAPI.readFile(
+          this.dataPath,
+          SETTINGS_FILE_NAME
+        );
       }
 
       if (!data) {
@@ -166,17 +192,17 @@ export class StorageService {
       }
 
       const settings: AppSettings = JSON.parse(data);
-      
+
       // 合并默认设置（处理新增的设置项）
       const mergedSettings = { ...DEFAULT_SETTINGS, ...settings };
 
       return { success: true, data: mergedSettings };
     } catch (error) {
-      console.error('加载应用设置失败:', error);
-      return { 
-        success: false, 
-        error: '加载应用设置失败',
-        data: DEFAULT_SETTINGS
+      console.error("加载应用设置失败:", error);
+      return {
+        success: false,
+        error: "加载应用设置失败",
+        data: DEFAULT_SETTINGS,
       };
     }
   }
@@ -192,19 +218,23 @@ export class StorageService {
 
       const data = JSON.stringify(settings, null, 2);
 
-      if (this.dataPath === 'localStorage') {
+      if (this.dataPath === "localStorage") {
         localStorage.setItem(SETTINGS_FILE_NAME, data);
       } else {
-        await window.electronAPI.writeFile(this.dataPath, SETTINGS_FILE_NAME, data);
+        await window.electronAPI.writeFile(
+          this.dataPath,
+          SETTINGS_FILE_NAME,
+          data
+        );
       }
 
-      return { success: true, message: '设置保存成功' };
+      return { success: true, message: "设置保存成功" };
     } catch (error) {
-      console.error('保存应用设置失败:', error);
-      return { 
-        success: false, 
-        error: '保存应用设置失败',
-        message: error instanceof Error ? error.message : '未知错误'
+      console.error("保存应用设置失败:", error);
+      return {
+        success: false,
+        error: "保存应用设置失败",
+        message: error instanceof Error ? error.message : "未知错误",
       };
     }
   }
@@ -213,8 +243,8 @@ export class StorageService {
    * 导出连接配置
    */
   public async exportConnections(
-    config: ConnectionConfig, 
-    filePath: string, 
+    config: ConnectionConfig,
+    filePath: string,
     includePasswords: boolean = false
   ): Promise<OperationResult> {
     try {
@@ -227,26 +257,26 @@ export class StorageService {
 
       const data = JSON.stringify(exportData, null, 2);
 
-      if (this.dataPath === 'localStorage') {
+      if (this.dataPath === "localStorage") {
         // 开发环境下载文件
-        const blob = new Blob([data], { type: 'application/json' });
+        const blob = new Blob([data], { type: "application/json" });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
-        a.download = 'connections.json';
+        a.download = "connections.json";
         a.click();
         URL.revokeObjectURL(url);
       } else {
-        await window.electronAPI.writeFile('', filePath, data);
+        await window.electronAPI.writeFile("", filePath, data);
       }
 
-      return { success: true, message: '导出成功' };
+      return { success: true, message: "导出成功" };
     } catch (error) {
-      console.error('导出连接配置失败:', error);
-      return { 
-        success: false, 
-        error: '导出连接配置失败',
-        message: error instanceof Error ? error.message : '未知错误'
+      console.error("导出连接配置失败:", error);
+      return {
+        success: false,
+        error: "导出连接配置失败",
+        message: error instanceof Error ? error.message : "未知错误",
       };
     }
   }
@@ -254,34 +284,36 @@ export class StorageService {
   /**
    * 导入连接配置
    */
-  public async importConnections(filePath: string): Promise<OperationResult<ConnectionConfig>> {
+  public async importConnections(
+    filePath: string
+  ): Promise<OperationResult<ConnectionConfig>> {
     try {
       let data: string;
 
-      if (this.dataPath === 'localStorage') {
+      if (this.dataPath === "localStorage") {
         // 开发环境处理文件上传
-        return { success: false, error: '开发环境不支持文件导入' };
+        return { success: false, error: "开发环境不支持文件导入" };
       } else {
-        data = await window.electronAPI.readFile('', filePath);
+        data = await window.electronAPI.readFile("", filePath);
       }
 
       const config: ConnectionConfig = JSON.parse(data);
-      
+
       // 验证配置格式
       if (!this.validateConfig(config)) {
-        return { success: false, error: '配置文件格式无效' };
+        return { success: false, error: "配置文件格式无效" };
       }
 
       // 为导入的项目生成新的ID
       config.groups = this.regenerateIds(config.groups);
 
-      return { success: true, data: config, message: '导入成功' };
+      return { success: true, data: config, message: "导入成功" };
     } catch (error) {
-      console.error('导入连接配置失败:', error);
-      return { 
-        success: false, 
-        error: '导入连接配置失败',
-        message: error instanceof Error ? error.message : '未知错误'
+      console.error("导入连接配置失败:", error);
+      return {
+        success: false,
+        error: "导入连接配置失败",
+        message: error instanceof Error ? error.message : "未知错误",
       };
     }
   }
@@ -293,19 +325,19 @@ export class StorageService {
     try {
       const result = await this.loadConnections();
       if (!result.success || !result.data) {
-        return { success: false, error: '无法加载配置进行备份' };
+        return { success: false, error: "无法加载配置进行备份" };
       }
 
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const backupFileName = `backup-${timestamp}.json`;
 
       return await this.exportConnections(result.data, backupFileName, true);
     } catch (error) {
-      console.error('创建备份失败:', error);
-      return { 
-        success: false, 
-        error: '创建备份失败',
-        message: error instanceof Error ? error.message : '未知错误'
+      console.error("创建备份失败:", error);
+      return {
+        success: false,
+        error: "创建备份失败",
+        message: error instanceof Error ? error.message : "未知错误",
       };
     }
   }
@@ -314,15 +346,15 @@ export class StorageService {
    * 加密分组数据
    */
   private encryptGroups(groups: ConnectionGroup[]): ConnectionGroup[] {
-    return groups.map(group => ({
+    return groups.map((group) => ({
       ...group,
-      children: group.children.map(child => {
+      children: group.children.map((child) => {
         if (isConnectionGroup(child)) {
           return this.encryptGroups([child])[0];
         } else {
-          return encryptionService.encryptObject(child, ['password']);
+          return encryptionService.encryptObject(child, ["password"]);
         }
-      })
+      }),
     }));
   }
 
@@ -330,15 +362,15 @@ export class StorageService {
    * 解密分组数据
    */
   private decryptGroups(groups: ConnectionGroup[]): ConnectionGroup[] {
-    return groups.map(group => ({
+    return groups.map((group) => ({
       ...group,
-      children: group.children.map(child => {
+      children: group.children.map((child) => {
         if (isConnectionGroup(child)) {
           return this.decryptGroups([child])[0];
         } else {
-          return encryptionService.decryptObject(child, ['password']);
+          return encryptionService.decryptObject(child, ["password"]);
         }
-      })
+      }),
     }));
   }
 
@@ -346,15 +378,15 @@ export class StorageService {
    * 移除密码信息
    */
   private removePasswords(groups: ConnectionGroup[]): ConnectionGroup[] {
-    return groups.map(group => ({
+    return groups.map((group) => ({
       ...group,
-      children: group.children.map(child => {
+      children: group.children.map((child) => {
         if (isConnectionGroup(child)) {
           return this.removePasswords([child])[0];
         } else {
-          return { ...child, password: '' };
+          return { ...child, password: "" };
         }
-      })
+      }),
     }));
   }
 
@@ -362,16 +394,16 @@ export class StorageService {
    * 重新生成ID
    */
   private regenerateIds(groups: ConnectionGroup[]): ConnectionGroup[] {
-    return groups.map(group => ({
+    return groups.map((group) => ({
       ...group,
       id: uuidv4(),
-      children: group.children.map(child => {
+      children: group.children.map((child) => {
         if (isConnectionGroup(child)) {
           return this.regenerateIds([child])[0];
         } else {
           return { ...child, id: uuidv4() };
         }
-      })
+      }),
     }));
   }
 
@@ -381,10 +413,10 @@ export class StorageService {
   private validateConfig(config: any): config is ConnectionConfig {
     return (
       config &&
-      typeof config === 'object' &&
+      typeof config === "object" &&
       Array.isArray(config.groups) &&
       config.settings &&
-      typeof config.settings === 'object'
+      typeof config.settings === "object"
     );
   }
 
@@ -393,7 +425,7 @@ export class StorageService {
    */
   public cleanup(): void {
     this.isInitialized = false;
-    this.dataPath = '';
+    this.dataPath = "";
   }
 }
 

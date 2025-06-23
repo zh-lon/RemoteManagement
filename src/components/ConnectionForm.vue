@@ -582,6 +582,12 @@ watch(
 // 方法
 const initForm = () => {
   if (props.connection) {
+    console.log("ConnectionForm: 初始化表单，连接数据:", props.connection);
+    console.log(
+      "ConnectionForm: 连接密码:",
+      props.connection.password ? "***" : "(空)"
+    );
+
     // 编辑模式，填充现有数据
     Object.assign(formData, {
       name: props.connection.name,
@@ -592,6 +598,12 @@ const initForm = () => {
       password: props.connection.password,
       description: props.connection.description || "",
       tags: props.connection.tags || [],
+    });
+
+    console.log("ConnectionForm: 表单数据填充后:", {
+      name: formData.name,
+      username: formData.username,
+      password: formData.password ? "***" : "(空)",
     });
 
     // 填充类型特定配置

@@ -19,6 +19,7 @@ import { storageService } from "./storage";
 export class ConnectionService {
   private static instance: ConnectionService;
   private clientConfigs: Record<string, ClientConfig> = {};
+  private isUpdating: boolean = false; // 防止在更新过程中重新初始化
 
   private constructor() {}
 
@@ -36,6 +37,12 @@ export class ConnectionService {
    * 初始化客户端配置
    */
   public async initializeClients(): Promise<void> {
+    // 如果正在更新配置，跳过初始化
+    if (this.isUpdating) {
+      console.log("ConnectionService: 跳过初始化，正在更新配置中");
+      return;
+    }
+
     try {
       const settingsResult = await storageService.loadSettings();
       if (settingsResult.success && settingsResult.data) {
@@ -81,7 +88,13 @@ export class ConnectionService {
    * 更新客户端配置
    */
   public updateClientConfigs(configs: Record<string, ClientConfig>): void {
+    this.isUpdating = true;
     this.clientConfigs = configs;
+    console.log("ConnectionService: 配置已更新", configs);
+    // 短暂延迟后解除锁定，防止立即重新初始化
+    setTimeout(() => {
+      this.isUpdating = false;
+    }, 100);
   }
 
   /**
