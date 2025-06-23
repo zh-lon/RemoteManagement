@@ -17,6 +17,11 @@
         <ClientStatus />
       </el-tab-pane>
 
+      <!-- 连接测试 -->
+      <el-tab-pane label="连接测试" name="test">
+        <ConnectionTester />
+      </el-tab-pane>
+
       <!-- 应用设置 -->
       <el-tab-pane label="应用设置" name="app">
         <div class="settings-content">
@@ -170,6 +175,7 @@ import { ElMessage } from "element-plus";
 import { Monitor } from "@element-plus/icons-vue";
 import ClientStatus from "./ClientStatus.vue";
 import ClientConfigManager from "./ClientConfigManager.vue";
+import ConnectionTester from "./ConnectionTester.vue";
 import { AppSettings } from "@/types/connection";
 import {
   DEFAULT_SETTINGS,

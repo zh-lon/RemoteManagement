@@ -227,6 +227,19 @@ export class ConnectionService {
         connection
       );
 
+      // 调试信息：记录启动参数
+      console.log(`启动客户端: ${clientConfig.name}`);
+      console.log(`可执行文件路径: ${clientConfig.path}`);
+      console.log(`参数模板: ${clientConfig.arguments}`);
+      console.log(`解析后的参数:`, args);
+      console.log(`连接信息:`, {
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+        password: connection.password ? "***" : "(空)",
+        type: connection.type,
+      });
+
       // 启动客户端
       const result = await window.electronAPI?.launchProgram(
         clientConfig.path,
@@ -265,12 +278,16 @@ export class ConnectionService {
   ): string[] {
     if (!template) return [];
 
+    // 安全地处理密码中的特殊字符
+    const safePassword = this.escapePassword(connection.password);
+    const safeUsername = this.escapeUsername(connection.username);
+
     // 替换模板变量
     let parsedTemplate = template
       .replace(/{host}/g, connection.host)
       .replace(/{port}/g, connection.port.toString())
-      .replace(/{username}/g, connection.username)
-      .replace(/{password}/g, connection.password);
+      .replace(/{username}/g, safeUsername)
+      .replace(/{password}/g, safePassword);
 
     // 处理协议类型
     if (
@@ -281,8 +298,124 @@ export class ConnectionService {
       parsedTemplate = parsedTemplate.replace(/{protocol}/g, protocol);
     }
 
-    // 分割参数并过滤空值
-    return parsedTemplate.split(" ").filter((arg) => arg.trim().length > 0);
+    // 处理SSH特有的变量
+    if (connection.type === ConnectionType.SSH) {
+      const sshConnection = connection as SSHConnection;
+      if (sshConnection.usePrivateKey && sshConnection.privateKeyPath) {
+        parsedTemplate = parsedTemplate.replace(
+          /{privatekey}/g,
+          sshConnection.privateKeyPath
+        );
+      }
+      if (sshConnection.compression) {
+        parsedTemplate = parsedTemplate.replace(/{compression}/g, "-C");
+      } else {
+        parsedTemplate = parsedTemplate.replace(/{compression}/g, "");
+      }
+    }
+
+    // 处理FTP特有的变量
+    if (
+      connection.type === ConnectionType.FTP ||
+      connection.type === ConnectionType.SFTP
+    ) {
+      const ftpConnection = connection as FTPConnection;
+      if (ftpConnection.initialPath) {
+        parsedTemplate = parsedTemplate.replace(
+          /{initialpath}/g,
+          ftpConnection.initialPath
+        );
+      } else {
+        parsedTemplate = parsedTemplate.replace(/{initialpath}/g, "");
+      }
+    }
+
+    // 智能分割参数
+    return this.smartSplitArguments(parsedTemplate);
+  }
+
+  /**
+   * 转义密码中的特殊字符
+   */
+  private escapePassword(password: string): string {
+    if (!password) return "";
+
+    // 对于包含空格或特殊字符的密码，需要用引号包围
+    if (
+      password.includes(" ") ||
+      password.includes("&") ||
+      password.includes("|") ||
+      password.includes("<") ||
+      password.includes(">") ||
+      password.includes("^")
+    ) {
+      return `"${password.replace(/"/g, '\\"')}"`;
+    }
+
+    return password;
+  }
+
+  /**
+   * 转义用户名中的特殊字符
+   */
+  private escapeUsername(username: string): string {
+    if (!username) return "";
+
+    // 对于包含空格的用户名，需要用引号包围
+    if (username.includes(" ")) {
+      return `"${username}"`;
+    }
+
+    return username;
+  }
+
+  /**
+   * 智能分割参数字符串
+   */
+  private smartSplitArguments(template: string): string[] {
+    const args: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    let quoteChar = "";
+
+    for (let i = 0; i < template.length; i++) {
+      const char = template[i];
+
+      if ((char === '"' || char === "'") && !inQuotes) {
+        inQuotes = true;
+        quoteChar = char;
+        current += char;
+      } else if (char === quoteChar && inQuotes) {
+        inQuotes = false;
+        quoteChar = "";
+        current += char;
+      } else if (char === " " && !inQuotes) {
+        if (current.trim()) {
+          args.push(current.trim());
+          current = "";
+        }
+      } else {
+        current += char;
+      }
+    }
+
+    if (current.trim()) {
+      args.push(current.trim());
+    }
+
+    // 过滤空参数并清理引号
+    return args
+      .filter((arg) => arg.length > 0)
+      .map((arg) => {
+        // 移除外层引号但保留内容
+        if (
+          (arg.startsWith('"') && arg.endsWith('"')) ||
+          (arg.startsWith("'") && arg.endsWith("'"))
+        ) {
+          return arg.slice(1, -1);
+        }
+        return arg;
+      });
   }
 
   /**
