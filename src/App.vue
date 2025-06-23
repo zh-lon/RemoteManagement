@@ -5,6 +5,7 @@ import ConnectionTree from "./components/ConnectionTree.vue";
 import ConnectionDetail from "./components/ConnectionDetail.vue";
 import ConnectionForm from "./components/ConnectionForm.vue";
 import GroupForm from "./components/GroupForm.vue";
+import SettingsDialog from "./components/SettingsDialog.vue";
 import {
   ConnectionConfig,
   ConnectionGroup,
@@ -18,6 +19,7 @@ import { storageService } from "./services/storage";
 import { connectionService } from "./services/connection";
 import { encryptionService } from "./services/encryption";
 import { v4 as uuidv4 } from "uuid";
+import { DEFAULT_SETTINGS } from "./utils/constants";
 
 // 响应式数据
 const treeData = ref<ConnectionGroup[]>([]);
@@ -30,6 +32,7 @@ const groupFormVisible = ref(false);
 const editingConnection = ref<ConnectionItem | null>(null);
 const editingGroup = ref<ConnectionGroup | null>(null);
 const editingParentGroup = ref<ConnectionGroup | null>(null);
+const settingsVisible = ref(false);
 
 // 计算属性
 const groupTreeData = computed(() => {
@@ -50,6 +53,21 @@ const groupTreeData = computed(() => {
 // 生命周期
 onMounted(async () => {
   await initializeApp();
+
+  // 初始化连接服务
+  await connectionService.initializeClients();
+
+  // 监听菜单事件
+  if (window.ipcRenderer) {
+    window.ipcRenderer.on("show-settings", () => {
+      settingsVisible.value = true;
+    });
+
+    window.ipcRenderer.on("show-client-status", () => {
+      settingsVisible.value = true;
+      // 可以在这里设置默认标签页为客户端状态
+    });
+  }
 });
 
 // 方法
@@ -100,17 +118,7 @@ const saveConnections = async () => {
     const config: ConnectionConfig = {
       version: "1.0.0",
       groups: treeData.value,
-      settings: {
-        theme: "auto",
-        language: "zh-CN",
-        autoSave: true,
-        confirmBeforeDelete: true,
-        showConnectionCount: true,
-        defaultConnectionType: ConnectionType.SSH,
-        encryptionEnabled: true,
-        backupEnabled: true,
-        backupInterval: 24,
-      },
+      settings: DEFAULT_SETTINGS,
     };
 
     const result = await storageService.saveConnections(config);
@@ -426,6 +434,9 @@ const findGroupById = (id: string): ConnectionGroup | null => {
       :parent-group="editingParentGroup"
       @submit="handleGroupSubmit"
     />
+
+    <!-- 设置对话框 -->
+    <SettingsDialog v-model:visible="settingsVisible" />
   </div>
 </template>
 

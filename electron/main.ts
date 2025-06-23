@@ -155,6 +155,24 @@ function createMenu() {
       ],
     },
     {
+      label: "工具",
+      submenu: [
+        {
+          label: "客户端状态",
+          click: () => {
+            win?.webContents.send("show-client-status");
+          },
+        },
+        {
+          label: "设置",
+          accelerator: "CmdOrCtrl+,",
+          click: () => {
+            win?.webContents.send("show-settings");
+          },
+        },
+      ],
+    },
+    {
       label: "帮助",
       submenu: [
         {

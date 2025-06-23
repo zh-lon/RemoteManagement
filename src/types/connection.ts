@@ -1,19 +1,19 @@
 // 连接类型枚举
 export enum ConnectionType {
-  RDP = 'rdp',
-  SSH = 'ssh',
-  VNC = 'vnc',
-  TELNET = 'telnet',
-  FTP = 'ftp',
-  SFTP = 'sftp'
+  RDP = "rdp",
+  SSH = "ssh",
+  VNC = "vnc",
+  TELNET = "telnet",
+  FTP = "ftp",
+  SFTP = "sftp",
 }
 
 // 连接状态枚举
 export enum ConnectionStatus {
-  DISCONNECTED = 'disconnected',
-  CONNECTING = 'connecting',
-  CONNECTED = 'connected',
-  ERROR = 'error'
+  DISCONNECTED = "disconnected",
+  CONNECTING = "connecting",
+  CONNECTED = "connected",
+  ERROR = "error",
 }
 
 // 基础连接配置接口
@@ -84,7 +84,12 @@ export interface TelnetConnection extends BaseConnection {
 }
 
 // 联合类型：所有连接类型
-export type ConnectionItem = RDPConnection | SSHConnection | VNCConnection | FTPConnection | TelnetConnection;
+export type ConnectionItem =
+  | RDPConnection
+  | SSHConnection
+  | VNCConnection
+  | FTPConnection
+  | TelnetConnection;
 
 // 连接分组接口
 export interface ConnectionGroup {
@@ -108,10 +113,19 @@ export interface ConnectionConfig {
   settings: AppSettings;
 }
 
+// 客户端配置接口
+export interface ClientConfig {
+  name: string;
+  executable: string;
+  path: string;
+  enabled: boolean;
+  arguments?: string; // 自定义参数模板
+}
+
 // 应用设置接口
 export interface AppSettings {
-  theme: 'light' | 'dark' | 'auto';
-  language: 'zh-CN' | 'en-US';
+  theme: "light" | "dark" | "auto";
+  language: "zh-CN" | "en-US";
   autoSave: boolean;
   confirmBeforeDelete: boolean;
   showConnectionCount: boolean;
@@ -119,6 +133,7 @@ export interface AppSettings {
   encryptionEnabled: boolean;
   backupEnabled: boolean;
   backupInterval: number; // 小时
+  clientPaths: Record<string, ClientConfig>; // 客户端路径配置
 }
 
 // 连接历史记录
@@ -184,11 +199,11 @@ export interface ConnectionTestResult {
 
 // 类型守卫函数
 export function isConnectionGroup(node: TreeNode): node is ConnectionGroup {
-  return 'children' in node;
+  return "children" in node;
 }
 
 export function isConnectionItem(node: TreeNode): node is ConnectionItem {
-  return 'type' in node && 'host' in node;
+  return "type" in node && "host" in node;
 }
 
 // 默认端口映射
@@ -198,25 +213,25 @@ export const DEFAULT_PORTS: Record<ConnectionType, number> = {
   [ConnectionType.VNC]: 5900,
   [ConnectionType.TELNET]: 23,
   [ConnectionType.FTP]: 21,
-  [ConnectionType.SFTP]: 22
+  [ConnectionType.SFTP]: 22,
 };
 
 // 连接类型显示名称
 export const CONNECTION_TYPE_NAMES: Record<ConnectionType, string> = {
-  [ConnectionType.RDP]: 'Remote Desktop',
-  [ConnectionType.SSH]: 'SSH',
-  [ConnectionType.VNC]: 'VNC',
-  [ConnectionType.TELNET]: 'Telnet',
-  [ConnectionType.FTP]: 'FTP',
-  [ConnectionType.SFTP]: 'SFTP'
+  [ConnectionType.RDP]: "Remote Desktop",
+  [ConnectionType.SSH]: "SSH",
+  [ConnectionType.VNC]: "VNC",
+  [ConnectionType.TELNET]: "Telnet",
+  [ConnectionType.FTP]: "FTP",
+  [ConnectionType.SFTP]: "SFTP",
 };
 
 // 连接类型图标
 export const CONNECTION_TYPE_ICONS: Record<ConnectionType, string> = {
-  [ConnectionType.RDP]: 'Monitor',
-  [ConnectionType.SSH]: 'Terminal',
-  [ConnectionType.VNC]: 'View',
-  [ConnectionType.TELNET]: 'ChatLineSquare',
-  [ConnectionType.FTP]: 'Folder',
-  [ConnectionType.SFTP]: 'FolderOpened'
+  [ConnectionType.RDP]: "Monitor",
+  [ConnectionType.SSH]: "Terminal",
+  [ConnectionType.VNC]: "View",
+  [ConnectionType.TELNET]: "ChatLineSquare",
+  [ConnectionType.FTP]: "Folder",
+  [ConnectionType.SFTP]: "FolderOpened",
 };
