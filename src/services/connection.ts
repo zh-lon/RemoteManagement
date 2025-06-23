@@ -172,6 +172,53 @@ export class ConnectionService {
   }
 
   /**
+   * 为SSH连接启动SFTP客户端
+   */
+  public async connectSftp(
+    sshConnection: SSHConnection
+  ): Promise<OperationResult> {
+    try {
+      // 创建一个临时的SFTP连接配置
+      const sftpConnection: FTPConnection = {
+        ...sshConnection,
+        type: ConnectionType.SFTP,
+        // SFTP通常使用SSH端口22，但如果SSH使用了其他端口，保持一致
+        port: sshConnection.port,
+        // SFTP特有的配置
+        passiveMode: false, // SFTP不使用被动模式
+        encoding: sshConnection.encoding || "UTF-8",
+        initialPath: "/", // 默认根目录
+      };
+
+      // 按优先级获取可用的SFTP客户端
+      const sftpClients = ["xftp", "winscp", "filezilla"];
+
+      for (const clientKey of sftpClients) {
+        const clientConfig = this.clientConfigs[clientKey];
+        if (clientConfig && clientConfig.enabled && clientConfig.path) {
+          console.log(`使用 ${clientConfig.name} 启动SFTP连接`);
+          return await this.launchClientWithConfig(
+            clientConfig,
+            sftpConnection
+          );
+        }
+      }
+
+      return {
+        success: false,
+        error:
+          "未找到可用的SFTP客户端，请在设置中配置Xftp、WinSCP或FileZilla客户端路径",
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: "SFTP连接失败",
+        message: (error as Error).message,
+      };
+    }
+  }
+
+  /**
    * 连接RDP
    */
   private async connectRDP(

@@ -117,6 +117,16 @@
             <el-icon><Connection /></el-icon>
             连接
           </el-button>
+          <!-- SSH连接的SFTP按钮 -->
+          <el-button
+            v-if="selectedNode.type === ConnectionType.SSH"
+            type="success"
+            @click="handleSftpConnect"
+            :loading="sftpConnecting"
+          >
+            <el-icon><FolderOpened /></el-icon>
+            SFTP
+          </el-button>
           <el-button @click="handleTestConnection">
             <el-icon><Connection /></el-icon>
             测试连接
@@ -372,6 +382,7 @@ const emit = defineEmits<{
 
 // 响应式数据
 const connecting = ref(false);
+const sftpConnecting = ref(false);
 const showPassword = ref(false);
 
 // 方法
@@ -487,6 +498,28 @@ const handleTestConnection = async () => {
     }
   } catch (error) {
     ElMessage.error("连接测试失败");
+  }
+};
+
+const handleSftpConnect = async () => {
+  if (!props.selectedNode || isConnectionGroup(props.selectedNode)) return;
+  if (props.selectedNode.type !== ConnectionType.SSH) return;
+
+  console.log("开始SFTP连接:", props.selectedNode);
+  sftpConnecting.value = true;
+  try {
+    const result = await connectionService.connectSftp(props.selectedNode);
+    console.log("SFTP连接结果:", result);
+    if (result.success) {
+      ElMessage.success(result.message || "SFTP连接已启动");
+    } else {
+      ElMessage.error(result.error || "SFTP连接失败");
+    }
+  } catch (error) {
+    console.error("SFTP连接失败:", error);
+    ElMessage.error("SFTP连接失败");
+  } finally {
+    sftpConnecting.value = false;
   }
 };
 </script>
