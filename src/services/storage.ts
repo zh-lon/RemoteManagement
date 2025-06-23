@@ -2,12 +2,9 @@ import { v4 as uuidv4 } from "uuid";
 import {
   ConnectionConfig,
   ConnectionGroup,
-  ConnectionItem,
   AppSettings,
   OperationResult,
-  TreeNode,
   isConnectionGroup,
-  isConnectionItem,
 } from "@/types/connection";
 import { encryptionService } from "./encryption";
 import {
@@ -79,6 +76,9 @@ export class StorageService {
         data = localStorage.getItem(DATA_FILE_NAME);
       } else {
         // 生产环境读取文件
+        if (!window.electronAPI) {
+          throw new Error("Electron API 不可用");
+        }
         data = await window.electronAPI.readFile(this.dataPath, DATA_FILE_NAME);
       }
 
@@ -153,6 +153,9 @@ export class StorageService {
         localStorage.setItem(DATA_FILE_NAME, data);
       } else {
         // 生产环境写入文件
+        if (!window.electronAPI) {
+          throw new Error("Electron API 不可用");
+        }
         await window.electronAPI.writeFile(this.dataPath, DATA_FILE_NAME, data);
       }
 
@@ -181,6 +184,9 @@ export class StorageService {
       if (this.dataPath === "localStorage") {
         data = localStorage.getItem(SETTINGS_FILE_NAME);
       } else {
+        if (!window.electronAPI) {
+          throw new Error("Electron API 不可用");
+        }
         data = await window.electronAPI.readFile(
           this.dataPath,
           SETTINGS_FILE_NAME
@@ -221,6 +227,9 @@ export class StorageService {
       if (this.dataPath === "localStorage") {
         localStorage.setItem(SETTINGS_FILE_NAME, data);
       } else {
+        if (!window.electronAPI) {
+          throw new Error("Electron API 不可用");
+        }
         await window.electronAPI.writeFile(
           this.dataPath,
           SETTINGS_FILE_NAME,
@@ -267,6 +276,9 @@ export class StorageService {
         a.click();
         URL.revokeObjectURL(url);
       } else {
+        if (!window.electronAPI) {
+          throw new Error("Electron API 不可用");
+        }
         await window.electronAPI.writeFile("", filePath, data);
       }
 
@@ -294,6 +306,9 @@ export class StorageService {
         // 开发环境处理文件上传
         return { success: false, error: "开发环境不支持文件导入" };
       } else {
+        if (!window.electronAPI) {
+          throw new Error("Electron API 不可用");
+        }
         data = await window.electronAPI.readFile("", filePath);
       }
 

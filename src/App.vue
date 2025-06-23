@@ -12,8 +12,6 @@ import {
   ConnectionItem,
   TreeNode,
   isConnectionGroup,
-  isConnectionItem,
-  ConnectionType,
 } from "./types/connection";
 import { storageService } from "./services/storage";
 import { connectionService } from "./services/connection";
