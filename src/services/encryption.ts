@@ -309,6 +309,41 @@ export class EncryptionService {
   }
 
   /**
+   * 存储密钥指纹
+   */
+  private async storeKeyFingerprint(fingerprint: string): Promise<void> {
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.writeFile(
+          "",
+          "encryption-key-fingerprint.txt",
+          fingerprint
+        );
+      }
+    } catch (error) {
+      console.warn("存储密钥指纹失败:", error);
+    }
+  }
+
+  /**
+   * 获取存储的密钥指纹
+   */
+  private async getStoredKeyFingerprint(): Promise<string | null> {
+    try {
+      if (window.electronAPI) {
+        return await window.electronAPI.readFile(
+          "",
+          "encryption-key-fingerprint.txt"
+        );
+      }
+      return null;
+    } catch (error) {
+      // 文件不存在或读取失败
+      return null;
+    }
+  }
+
+  /**
    * 生成默认密钥（基于机器信息）
    * @returns 默认密钥
    */
@@ -331,7 +366,7 @@ export class EncryptionService {
 
       // 存储密钥指纹用于验证
       const keyFingerprint = CryptoJS.SHA256(key).toString().substring(0, 8);
-      localStorage.setItem("encryption-key-fingerprint", keyFingerprint);
+      await this.storeKeyFingerprint(keyFingerprint);
 
       return key;
     } catch (error) {
@@ -345,7 +380,7 @@ export class EncryptionService {
       const keyFingerprint = CryptoJS.SHA256(fallbackKey)
         .toString()
         .substring(0, 8);
-      localStorage.setItem("encryption-key-fingerprint", keyFingerprint);
+      await this.storeKeyFingerprint(keyFingerprint);
 
       return fallbackKey;
     }
@@ -355,11 +390,9 @@ export class EncryptionService {
    * 验证当前密钥是否与存储的指纹匹配
    * @returns 是否匹配
    */
-  public verifyKeyFingerprint(): boolean {
+  public async verifyKeyFingerprint(): Promise<boolean> {
     try {
-      const storedFingerprint = localStorage.getItem(
-        "encryption-key-fingerprint"
-      );
+      const storedFingerprint = await this.getStoredKeyFingerprint();
       if (!storedFingerprint) {
         return true; // 如果没有存储指纹，认为是首次使用
       }

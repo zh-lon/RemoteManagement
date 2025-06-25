@@ -40,12 +40,24 @@ export class StorageService {
    */
   public async initialize(): Promise<void> {
     try {
-      // 在Electron环境中获取用户数据目录
-      if (window.electronAPI) {
-        this.dataPath = await window.electronAPI.getUserDataPath();
+      // 获取Electron用户数据目录
+      if (!window.electronAPI) {
+        throw new Error("此应用只能在Electron桌面环境中运行");
+      }
+
+      const baseDataPath = await window.electronAPI.getUserDataPath();
+
+      // 检查是否为开发环境
+      const isDevelopment = this.isDevelopmentMode();
+
+      if (isDevelopment) {
+        // 开发环境使用单独的子目录
+        this.dataPath = baseDataPath + "-dev";
+        console.log("检测到开发环境，使用开发专用数据目录:", this.dataPath);
       } else {
-        // 开发环境使用localStorage
-        this.dataPath = "localStorage";
+        // 生产环境使用标准目录
+        this.dataPath = baseDataPath;
+        console.log("检测到生产环境，使用标准数据目录:", this.dataPath);
       }
 
       this.isInitialized = true;
@@ -61,6 +73,29 @@ export class StorageService {
   }
 
   /**
+   * 检测是否为开发环境
+   */
+  private isDevelopmentMode(): boolean {
+    try {
+      // 检查Vite开发环境标识
+      if (typeof import.meta !== "undefined" && import.meta.env) {
+        return import.meta.env.DEV === true;
+      }
+
+      // 检查Node.js环境变量
+      if (typeof process !== "undefined" && process.env) {
+        return process.env.NODE_ENV === "development";
+      }
+
+      // 默认为生产环境
+      return false;
+    } catch (error) {
+      console.warn("检测开发环境时出错，默认为生产环境:", error);
+      return false;
+    }
+  }
+
+  /**
    * 加载连接配置
    */
   public async loadConnections(): Promise<OperationResult<ConnectionConfig>> {
@@ -71,16 +106,11 @@ export class StorageService {
 
       let data: string | null = null;
 
-      if (this.dataPath === "localStorage") {
-        // 开发环境使用localStorage
-        data = localStorage.getItem(DATA_FILE_NAME);
-      } else {
-        // 生产环境读取文件
-        if (!window.electronAPI) {
-          throw new Error("Electron API 不可用");
-        }
-        data = await window.electronAPI.readFile("", DATA_FILE_NAME);
+      // 读取文件
+      if (!window.electronAPI) {
+        throw new Error("Electron API 不可用");
       }
+      data = await window.electronAPI.readFile("", DATA_FILE_NAME);
 
       if (!data) {
         // 返回默认配置
@@ -95,7 +125,7 @@ export class StorageService {
       const config: ConnectionConfig = JSON.parse(data);
 
       // 验证加密密钥
-      if (!encryptionService.verifyKeyFingerprint()) {
+      if (!(await encryptionService.verifyKeyFingerprint())) {
         console.warn("加密密钥不匹配，可能导致解密失败");
       }
 
@@ -148,16 +178,11 @@ export class StorageService {
 
       const data = JSON.stringify(configToSave, null, 2);
 
-      if (this.dataPath === "localStorage") {
-        // 开发环境使用localStorage
-        localStorage.setItem(DATA_FILE_NAME, data);
-      } else {
-        // 生产环境写入文件
-        if (!window.electronAPI) {
-          throw new Error("Electron API 不可用");
-        }
-        await window.electronAPI.writeFile("", DATA_FILE_NAME, data);
+      // 写入文件
+      if (!window.electronAPI) {
+        throw new Error("Electron API 不可用");
       }
+      await window.electronAPI.writeFile("", DATA_FILE_NAME, data);
 
       return { success: true, message: "保存成功" };
     } catch (error) {
@@ -181,14 +206,11 @@ export class StorageService {
 
       let data: string | null = null;
 
-      if (this.dataPath === "localStorage") {
-        data = localStorage.getItem(SETTINGS_FILE_NAME);
-      } else {
-        if (!window.electronAPI) {
-          throw new Error("Electron API 不可用");
-        }
-        data = await window.electronAPI.readFile("", SETTINGS_FILE_NAME);
+      // 读取设置文件
+      if (!window.electronAPI) {
+        throw new Error("Electron API 不可用");
       }
+      data = await window.electronAPI.readFile("", SETTINGS_FILE_NAME);
 
       if (!data) {
         return { success: true, data: DEFAULT_SETTINGS };
@@ -221,14 +243,11 @@ export class StorageService {
 
       const data = JSON.stringify(settings, null, 2);
 
-      if (this.dataPath === "localStorage") {
-        localStorage.setItem(SETTINGS_FILE_NAME, data);
-      } else {
-        if (!window.electronAPI) {
-          throw new Error("Electron API 不可用");
-        }
-        await window.electronAPI.writeFile("", SETTINGS_FILE_NAME, data);
+      // 写入设置文件
+      if (!window.electronAPI) {
+        throw new Error("Electron API 不可用");
       }
+      await window.electronAPI.writeFile("", SETTINGS_FILE_NAME, data);
 
       return { success: true, message: "设置保存成功" };
     } catch (error) {
@@ -259,21 +278,11 @@ export class StorageService {
 
       const data = JSON.stringify(exportData, null, 2);
 
-      if (this.dataPath === "localStorage") {
-        // 开发环境下载文件
-        const blob = new Blob([data], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "connections.json";
-        a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        if (!window.electronAPI) {
-          throw new Error("Electron API 不可用");
-        }
-        await window.electronAPI.writeFile("", filePath, data);
+      // 导出文件
+      if (!window.electronAPI) {
+        throw new Error("Electron API 不可用");
       }
+      await window.electronAPI.writeFile("", filePath, data);
 
       return { success: true, message: "导出成功" };
     } catch (error) {
@@ -295,15 +304,11 @@ export class StorageService {
     try {
       let data: string;
 
-      if (this.dataPath === "localStorage") {
-        // 开发环境处理文件上传
-        return { success: false, error: "开发环境不支持文件导入" };
-      } else {
-        if (!window.electronAPI) {
-          throw new Error("Electron API 不可用");
-        }
-        data = await window.electronAPI.readFile("", filePath);
+      // 读取导入文件
+      if (!window.electronAPI) {
+        throw new Error("Electron API 不可用");
       }
+      data = await window.electronAPI.readFile("", filePath);
 
       const config: ConnectionConfig = JSON.parse(data);
 
