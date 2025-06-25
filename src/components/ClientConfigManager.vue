@@ -15,17 +15,25 @@
                 <template #default>
                   <div class="rdp-notice">
                     <p>
-                      <strong>重要提示：</strong
-                      >根据微软官方文档，mstsc不支持通过命令行直接传递用户名和密码。
+                      <strong>自动登录方式：</strong>系统使用
+                      <code>cmdkey</code>
+                      命令预先存储凭据，然后启动mstsc实现自动登录。
                     </p>
                     <p>
-                      <strong>实现方式：</strong
-                      >系统会创建临时RDP文件，包含连接配置（主机、端口、用户名），密码需要用户在连接时手动输入。
+                      <strong>连接流程：</strong><br />
+                      <code
+                        >cmdkey /generic:TERMSRV/服务器地址 /user:用户名
+                        /pass:密码</code
+                      ><br />
+                      <code>mstsc RDP文件路径</code>
                     </p>
                     <p>
-                      <strong>支持参数：</strong>仅支持
-                      <code>/v:{host}:{port}</code>
-                      参数，用户名会预填在登录界面中。
+                      <strong>回退机制：</strong
+                      >如果没有密码，系统会创建RDP文件，用户需要手动输入密码。
+                    </p>
+                    <p>
+                      <strong>安全性：</strong
+                      >凭据存储在Windows凭据管理器中，连接后可自动清理。
                     </p>
                   </div>
                 </template>

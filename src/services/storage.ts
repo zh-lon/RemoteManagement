@@ -79,7 +79,7 @@ export class StorageService {
         if (!window.electronAPI) {
           throw new Error("Electron API 不可用");
         }
-        data = await window.electronAPI.readFile(this.dataPath, DATA_FILE_NAME);
+        data = await window.electronAPI.readFile("", DATA_FILE_NAME);
       }
 
       if (!data) {
@@ -156,7 +156,7 @@ export class StorageService {
         if (!window.electronAPI) {
           throw new Error("Electron API 不可用");
         }
-        await window.electronAPI.writeFile(this.dataPath, DATA_FILE_NAME, data);
+        await window.electronAPI.writeFile("", DATA_FILE_NAME, data);
       }
 
       return { success: true, message: "保存成功" };
@@ -187,10 +187,7 @@ export class StorageService {
         if (!window.electronAPI) {
           throw new Error("Electron API 不可用");
         }
-        data = await window.electronAPI.readFile(
-          this.dataPath,
-          SETTINGS_FILE_NAME
-        );
+        data = await window.electronAPI.readFile("", SETTINGS_FILE_NAME);
       }
 
       if (!data) {
@@ -230,11 +227,7 @@ export class StorageService {
         if (!window.electronAPI) {
           throw new Error("Electron API 不可用");
         }
-        await window.electronAPI.writeFile(
-          this.dataPath,
-          SETTINGS_FILE_NAME,
-          data
-        );
+        await window.electronAPI.writeFile("", SETTINGS_FILE_NAME, data);
       }
 
       return { success: true, message: "设置保存成功" };

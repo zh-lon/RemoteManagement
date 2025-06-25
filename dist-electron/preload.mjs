@@ -1,1 +1,41 @@
-"use strict";const n=require("electron");n.contextBridge.exposeInMainWorld("ipcRenderer",{on(...e){const[r,i]=e;return n.ipcRenderer.on(r,(c,...t)=>i(c,...t))},off(...e){const[r,...i]=e;return n.ipcRenderer.off(r,...i)},send(...e){const[r,...i]=e;return n.ipcRenderer.send(r,...i)},invoke(...e){const[r,...i]=e;return n.ipcRenderer.invoke(r,...i)}});n.contextBridge.exposeInMainWorld("electronAPI",{getUserDataPath:()=>n.ipcRenderer.invoke("get-user-data-path"),readFile:(e,r)=>n.ipcRenderer.invoke("read-file",e,r),writeFile:(e,r,i)=>n.ipcRenderer.invoke("write-file",e,r,i),selectFile:e=>n.ipcRenderer.invoke("select-file",e),selectSavePath:(e,r)=>n.ipcRenderer.invoke("select-save-path",e,r),launchProgram:(e,r)=>n.ipcRenderer.invoke("launch-program",e,r),checkProgram:e=>n.ipcRenderer.invoke("check-program",e)});
+"use strict";
+const electron = require("electron");
+electron.contextBridge.exposeInMainWorld("ipcRenderer", {
+  on(...args) {
+    const [channel, listener] = args;
+    return electron.ipcRenderer.on(
+      channel,
+      (event, ...args2) => listener(event, ...args2)
+    );
+  },
+  off(...args) {
+    const [channel, ...omit] = args;
+    return electron.ipcRenderer.off(channel, ...omit);
+  },
+  send(...args) {
+    const [channel, ...omit] = args;
+    return electron.ipcRenderer.send(channel, ...omit);
+  },
+  invoke(...args) {
+    const [channel, ...omit] = args;
+    return electron.ipcRenderer.invoke(channel, ...omit);
+  }
+  // You can expose other APTs you need here.
+  // ...
+});
+electron.contextBridge.exposeInMainWorld("electronAPI", {
+  // 获取用户数据目录
+  getUserDataPath: () => electron.ipcRenderer.invoke("get-user-data-path"),
+  // 读取文件
+  readFile: (dir, fileName) => electron.ipcRenderer.invoke("read-file", dir, fileName),
+  // 写入文件
+  writeFile: (dir, fileName, data) => electron.ipcRenderer.invoke("write-file", dir, fileName, data),
+  // 选择文件
+  selectFile: (filters) => electron.ipcRenderer.invoke("select-file", filters),
+  // 选择保存路径
+  selectSavePath: (defaultName, filters) => electron.ipcRenderer.invoke("select-save-path", defaultName, filters),
+  // 启动外部程序
+  launchProgram: (program, args) => electron.ipcRenderer.invoke("launch-program", program, args),
+  // 检查程序是否存在
+  checkProgram: (program) => electron.ipcRenderer.invoke("check-program", program)
+});

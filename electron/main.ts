@@ -213,17 +213,33 @@ function setupIpcHandlers() {
     "write-file",
     async (event, dir: string, fileName: string, data: string) => {
       try {
-        const filePath = dir ? nodePath.join(dir, fileName) : fileName;
+        const userDataPath = app.getPath("userData");
+        const filePath = dir
+          ? nodePath.join(userDataPath, dir, fileName)
+          : nodePath.join(userDataPath, fileName);
         const dirPath = nodePath.dirname(filePath);
+
+        console.log("写入文件:", {
+          dir,
+          fileName,
+          filePath,
+          dirPath,
+          dataLength: data.length,
+        });
 
         // 确保目录存在
         if (!fs.existsSync(dirPath)) {
           fs.mkdirSync(dirPath, { recursive: true });
+          console.log("创建目录:", dirPath);
         }
 
         fs.writeFileSync(filePath, data, "utf-8");
+        console.log("文件写入成功:", filePath);
+
+        return { success: true };
       } catch (error) {
-        throw error;
+        console.error("文件写入失败:", error);
+        return { success: false, error: (error as Error).message };
       }
     }
   );
@@ -272,10 +288,19 @@ function setupIpcHandlers() {
     "launch-program",
     async (event, program: string, args: string[]) => {
       try {
+        console.log("启动程序:", {
+          program,
+          args,
+          argsCount: args.length,
+        });
+
         const child = spawn(program, args, { detached: true, stdio: "ignore" });
         child.unref();
+
+        console.log("程序启动成功:", program);
         return { success: true };
       } catch (error) {
+        console.error("程序启动失败:", error);
         return { success: false, error: (error as Error).message };
       }
     }

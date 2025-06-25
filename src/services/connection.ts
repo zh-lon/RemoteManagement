@@ -175,7 +175,8 @@ export class ConnectionService {
    * 创建RDP配置文件
    */
   private async createRDPFile(
-    connection: RDPConnection
+    connection: RDPConnection,
+    includePassword: boolean = true
   ): Promise<string | null> {
     try {
       console.log("开始创建RDP配置文件，连接信息:", {
@@ -256,6 +257,14 @@ kdcproxyname:s:`;
         console.log("添加域名到RDP文件:", connection.domain);
       }
 
+      // 注意：当使用cmdkey存储凭据时，不在RDP文件中包含密码
+      // 密码通过cmdkey命令预先存储在Windows凭据管理器中
+      if (includePassword) {
+        console.log("RDP文件模式：用户需要手动输入密码");
+      } else {
+        console.log("cmdkey模式：密码已通过cmdkey预先存储");
+      }
+
       // 添加分辨率设置
       if (connection.resolution && connection.resolution !== "fullscreen") {
         const [width, height] = connection.resolution.split("x");
@@ -322,6 +331,97 @@ kdcproxyname:s:`;
     } catch (error) {
       console.error("创建RDP文件异常:", error);
       return null;
+    }
+  }
+
+  /**
+   * 使用cmdkey + mstsc方式连接RDP
+   */
+  private async connectRDPWithCmdkey(
+    connection: RDPConnection,
+    clientConfig: ClientConfig
+  ): Promise<OperationResult> {
+    try {
+      // 构建服务器地址
+      const serverAddress =
+        connection.port === 3389
+          ? connection.host
+          : `${connection.host}:${connection.port}`;
+
+      console.log("使用cmdkey存储凭据:", {
+        serverAddress,
+        username: connection.username,
+        hasPassword: !!connection.password,
+      });
+
+      // 第一步：使用cmdkey存储凭据
+      const cmdkeyArgs = [
+        "/generic:TERMSRV/" + serverAddress,
+        "/user:" + connection.username,
+        "/pass:" + connection.password,
+      ];
+
+      console.log("执行cmdkey命令...");
+      const cmdkeyResult = await window.electronAPI?.launchProgram(
+        "cmdkey",
+        cmdkeyArgs
+      );
+
+      if (!cmdkeyResult?.success) {
+        console.error("cmdkey命令执行失败:", cmdkeyResult?.error);
+        return {
+          success: false,
+          error: "存储凭据失败",
+          message: cmdkeyResult?.error || "cmdkey命令执行失败",
+        };
+      }
+
+      console.log("凭据存储成功，准备启动mstsc...");
+
+      // 第二步：创建RDP文件或使用基本连接
+      let mstscArgs: string[] = [];
+
+      if (window.electronAPI?.writeFile) {
+        // 创建RDP文件（不包含密码，因为已通过cmdkey存储）
+        const rdpFilePath = await this.createRDPFile(connection, false);
+        if (rdpFilePath) {
+          console.log("使用RDP文件启动mstsc:", rdpFilePath);
+          mstscArgs = [rdpFilePath];
+        } else {
+          console.warn("RDP文件创建失败，使用基本连接参数");
+          mstscArgs = [`/v:${serverAddress}`];
+        }
+      } else {
+        console.log("使用基本连接参数");
+        mstscArgs = [`/v:${serverAddress}`];
+      }
+
+      // 第三步：启动mstsc
+      console.log("启动mstsc:", { args: mstscArgs });
+      const mstscResult = await window.electronAPI?.launchProgram(
+        clientConfig.path,
+        mstscArgs
+      );
+
+      if (mstscResult?.success) {
+        return {
+          success: true,
+          message: `RDP连接已启动 (${clientConfig.name}) - 自动登录`,
+        };
+      } else {
+        return {
+          success: false,
+          error: `${clientConfig.name}启动失败`,
+          message: mstscResult?.error,
+        };
+      }
+    } catch (error) {
+      console.error("cmdkey + mstsc连接失败:", error);
+      return {
+        success: false,
+        error: "RDP连接失败",
+        message: (error as Error).message,
+      };
     }
   }
 
@@ -393,14 +493,18 @@ kdcproxyname:s:`;
         username: connection.username,
       });
 
-      // 检查是否支持RDP文件创建
+      // 优先使用cmdkey + mstsc方式连接（有用户名密码时）
+      if (connection.username && connection.password) {
+        console.log("使用cmdkey + mstsc方式连接...");
+        return await this.connectRDPWithCmdkey(connection, clientConfig);
+      }
+
+      // 回退到RDP文件方式（无密码时）
       if (window.electronAPI?.writeFile) {
-        console.log("尝试使用RDP文件方式连接...");
-        // 创建临时RDP文件
+        console.log("无密码，尝试使用RDP文件方式连接...");
         const rdpFilePath = await this.createRDPFile(connection);
         if (rdpFilePath) {
           console.log("RDP文件创建成功，启动连接...");
-          // 使用RDP文件启动连接
           const result = await this.launchClientWithConfig(
             clientConfig,
             connection,
@@ -412,7 +516,7 @@ kdcproxyname:s:`;
         }
       }
 
-      // 回退到基本连接方式（仅主机和端口）
+      // 最后回退到基本连接方式（仅主机和端口）
       console.log("使用基本mstsc连接方式...");
       return await this.launchClientWithConfig(clientConfig, connection);
     } catch (error) {
