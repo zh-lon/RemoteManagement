@@ -14,11 +14,11 @@ interface ElectronAPI {
   // 文件对话框
   selectFile(
     filters?: Array<{ name: string; extensions: string[] }>
-  ): Promise<string | null>;
+  ): Promise<{ filePaths: string[]; canceled: boolean } | null>;
   selectSavePath(
     defaultName?: string,
     filters?: Array<{ name: string; extensions: string[] }>
-  ): Promise<string | null>;
+  ): Promise<{ filePath: string; canceled: boolean } | null>;
 
   // 程序启动
   launchProgram(

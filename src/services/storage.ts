@@ -5,6 +5,7 @@ import {
   AppSettings,
   OperationResult,
   isConnectionGroup,
+  isConnectionItem,
 } from "@/types/connection";
 import { encryptionService } from "./encryption";
 import {
@@ -36,10 +37,24 @@ export class StorageService {
   }
 
   /**
+   * 强制重置存储服务（用于环境切换）
+   */
+  public forceReset(): void {
+    console.log("🔄 强制重置存储服务");
+    this.isInitialized = false;
+    this.dataPath = "";
+  }
+
+  /**
    * 初始化存储服务
    */
   public async initialize(): Promise<void> {
     try {
+      console.log("📋 存储服务初始化开始，当前状态:", {
+        isInitialized: this.isInitialized,
+        currentDataPath: this.dataPath,
+      });
+
       // 获取Electron用户数据目录
       if (!window.electronAPI) {
         throw new Error("此应用只能在Electron桌面环境中运行");
@@ -47,18 +62,15 @@ export class StorageService {
 
       const baseDataPath = await window.electronAPI.getUserDataPath();
 
-      // 检查是否为开发环境
+      // 紧急解决方案：临时禁用环境分离
+      console.log("🔍 开始环境检测...");
       const isDevelopment = this.isDevelopmentMode();
+      console.log("🎯 环境检测结果:", isDevelopment ? "开发环境" : "生产环境");
 
-      if (isDevelopment) {
-        // 开发环境使用单独的子目录
-        this.dataPath = baseDataPath + "-dev";
-        console.log("检测到开发环境，使用开发专用数据目录:", this.dataPath);
-      } else {
-        // 生产环境使用标准目录
-        this.dataPath = baseDataPath;
-        console.log("检测到生产环境，使用标准数据目录:", this.dataPath);
-      }
+      // 紧急方案：禁用环境分离，统一使用生产环境路径
+      console.log("⚠️ 紧急方案：禁用环境分离");
+      this.dataPath = baseDataPath;
+      console.log("✅ 统一使用生产环境数据目录:", this.dataPath);
 
       this.isInitialized = true;
 
@@ -77,17 +89,59 @@ export class StorageService {
    */
   private isDevelopmentMode(): boolean {
     try {
+      console.log("环境检测调试信息:", {
+        hasImportMeta: typeof import.meta !== "undefined",
+        hasImportMetaEnv:
+          typeof import.meta !== "undefined" && !!import.meta.env,
+        importMetaEnvDev:
+          typeof import.meta !== "undefined" && import.meta.env
+            ? import.meta.env.DEV
+            : undefined,
+        hasProcess: typeof process !== "undefined",
+        hasProcessEnv: typeof process !== "undefined" && !!process.env,
+        processEnvNodeEnv:
+          typeof process !== "undefined" && process.env
+            ? process.env.NODE_ENV
+            : undefined,
+      });
+
+      // 检查是否在开发服务器环境中运行（通过URL检测）
+      if (typeof window !== "undefined" && window.location) {
+        console.log("当前URL信息:", {
+          hostname: window.location.hostname,
+          port: window.location.port,
+          href: window.location.href,
+        });
+
+        const isDevServer =
+          window.location.hostname === "localhost" &&
+          (window.location.port === "5173" || window.location.port === "5174");
+        if (isDevServer) {
+          console.log("✅ 检测到开发服务器环境:", window.location.href);
+          return true;
+        } else {
+          console.log("❌ 不是开发服务器环境");
+        }
+      } else {
+        console.log("❌ 无法访问window.location");
+      }
+
       // 检查Vite开发环境标识
       if (typeof import.meta !== "undefined" && import.meta.env) {
-        return import.meta.env.DEV === true;
+        const isDev = import.meta.env.DEV === true;
+        console.log("Vite环境检测结果:", isDev);
+        return isDev;
       }
 
       // 检查Node.js环境变量
       if (typeof process !== "undefined" && process.env) {
-        return process.env.NODE_ENV === "development";
+        const isDev = process.env.NODE_ENV === "development";
+        console.log("Node.js环境检测结果:", isDev);
+        return isDev;
       }
 
       // 默认为生产环境
+      console.log("使用默认环境：生产环境");
       return false;
     } catch (error) {
       console.warn("检测开发环境时出错，默认为生产环境:", error);
@@ -100,9 +154,13 @@ export class StorageService {
    */
   public async loadConnections(): Promise<OperationResult<ConnectionConfig>> {
     try {
+      console.log("📖 开始加载连接配置...");
       if (!this.isInitialized) {
+        console.log("🔧 存储服务未初始化，开始初始化...");
         await this.initialize();
       }
+
+      console.log("📁 当前数据路径:", this.dataPath);
 
       let data: string | null = null;
 
@@ -110,7 +168,14 @@ export class StorageService {
       if (!window.electronAPI) {
         throw new Error("Electron API 不可用");
       }
+
+      console.log("📄 读取文件:", DATA_FILE_NAME);
       data = await window.electronAPI.readFile("", DATA_FILE_NAME);
+      console.log("📊 文件读取结果:", {
+        hasData: !!data,
+        dataLength: data?.length || 0,
+        dataPreview: data?.substring(0, 100) + "...",
+      });
 
       if (!data) {
         // 返回默认配置
@@ -122,19 +187,44 @@ export class StorageService {
         return { success: true, data: defaultConfig };
       }
 
+      console.log("🔍 解析JSON数据...");
       const config: ConnectionConfig = JSON.parse(data);
+      console.log("📋 解析后的配置:", {
+        version: config.version,
+        groupsCount: config.groups?.length || 0,
+        hasSettings: !!config.settings,
+        groupsPreview: config.groups?.map((g) => ({
+          id: g.id,
+          name: g.name,
+          childrenCount: g.children?.length || 0,
+        })),
+      });
 
       // 验证加密密钥
-      if (!(await encryptionService.verifyKeyFingerprint())) {
-        console.warn("加密密钥不匹配，可能导致解密失败");
+      console.log("🔐 验证加密密钥...");
+      const keyValid = await encryptionService.verifyKeyFingerprint();
+      console.log("🔑 密钥验证结果:", keyValid);
+      if (!keyValid) {
+        console.warn("⚠️ 加密密钥不匹配，可能导致解密失败");
       }
 
       // 解密敏感数据
       try {
+        console.log("🔓 开始解密连接数据...");
+        const originalGroupsCount = config.groups?.length || 0;
         config.groups = this.decryptGroups(config.groups);
-        console.log("连接配置解密成功");
+        const decryptedGroupsCount = config.groups?.length || 0;
+        console.log("✅ 连接配置解密成功:", {
+          originalGroupsCount,
+          decryptedGroupsCount,
+          decryptedGroups: config.groups?.map((g) => ({
+            id: g.id,
+            name: g.name,
+            childrenCount: g.children?.length || 0,
+          })),
+        });
       } catch (error) {
-        console.error("解密连接配置失败:", error);
+        console.error("❌ 解密连接配置失败:", error);
         // 如果解密失败，返回默认配置
         const defaultConfig: ConnectionConfig = {
           version: APP_VERSION,
@@ -269,12 +359,19 @@ export class StorageService {
     includePasswords: boolean = false
   ): Promise<OperationResult> {
     try {
-      let exportData = { ...config };
+      // 只导出连接相关的数据，不包含应用设置
+      const exportData = {
+        version: config.version,
+        groups: includePasswords
+          ? config.groups
+          : this.removePasswords(config.groups),
+      };
 
-      if (!includePasswords) {
-        // 移除密码信息
-        exportData.groups = this.removePasswords(exportData.groups);
-      }
+      console.log("导出连接数据:", {
+        groupsCount: exportData.groups.length,
+        version: exportData.version,
+        includePasswords,
+      });
 
       const data = JSON.stringify(exportData, null, 2);
 
@@ -282,9 +379,96 @@ export class StorageService {
       if (!window.electronAPI) {
         throw new Error("Electron API 不可用");
       }
-      await window.electronAPI.writeFile("", filePath, data);
+
+      // 验证文件路径
+      if (!filePath || typeof filePath !== "string") {
+        throw new Error("无效的文件路径");
+      }
+
+      // 分离目录和文件名
+      const lastSlashIndex = Math.max(
+        filePath.lastIndexOf("/"),
+        filePath.lastIndexOf("\\")
+      );
+      const fileName =
+        lastSlashIndex >= 0 ? filePath.substring(lastSlashIndex + 1) : filePath;
+      const dirPath =
+        lastSlashIndex >= 0 ? filePath.substring(0, lastSlashIndex) : "";
+
+      console.log("导出文件路径信息:", { filePath, dirPath, fileName });
+
+      // 使用完整路径写入文件
+      await window.electronAPI.writeFile(dirPath, fileName, data);
 
       return { success: true, message: "导出成功" };
+    } catch (error) {
+      console.error("导出连接配置失败:", error);
+      return {
+        success: false,
+        error: "导出连接配置失败",
+        message: error instanceof Error ? error.message : "未知错误",
+      };
+    }
+  }
+
+  /**
+   * 导出连接配置（包含明文密码，可跨机器使用）
+   */
+  public async exportConnectionsWithPasswords(
+    config: ConnectionConfig,
+    filePath: string
+  ): Promise<OperationResult> {
+    try {
+      // 只导出连接相关的数据，不包含应用设置
+      const exportData = {
+        version: config.version,
+        groups: this.decryptPasswordsForExport(config.groups),
+        exportInfo: {
+          exportedAt: new Date().toISOString(),
+          exportedBy: "RemoteManagement",
+          version: config.version,
+          passwordEncrypted: false,
+          note: "此文件包含明文密码，可在其他机器上导入使用，请妥善保管",
+        },
+      };
+
+      console.log("导出连接数据:", {
+        groupsCount: exportData.groups.length,
+        version: exportData.version,
+        hasExportInfo: !!exportData.exportInfo,
+      });
+
+      const data = JSON.stringify(exportData, null, 2);
+
+      // 导出文件
+      if (!window.electronAPI) {
+        throw new Error("Electron API 不可用");
+      }
+
+      // 验证文件路径
+      if (!filePath || typeof filePath !== "string") {
+        throw new Error("无效的文件路径");
+      }
+
+      // 分离目录和文件名
+      const lastSlashIndex = Math.max(
+        filePath.lastIndexOf("/"),
+        filePath.lastIndexOf("\\")
+      );
+      const fileName =
+        lastSlashIndex >= 0 ? filePath.substring(lastSlashIndex + 1) : filePath;
+      const dirPath =
+        lastSlashIndex >= 0 ? filePath.substring(0, lastSlashIndex) : "";
+
+      console.log("导出文件路径信息:", { filePath, dirPath, fileName });
+
+      // 使用完整路径写入文件
+      await window.electronAPI.writeFile(dirPath, fileName, data);
+
+      return {
+        success: true,
+        message: "导出成功（包含明文密码）",
+      };
     } catch (error) {
       console.error("导出连接配置失败:", error);
       return {
@@ -317,10 +501,23 @@ export class StorageService {
         return { success: false, error: "配置文件格式无效" };
       }
 
+      // 检查是否包含明文密码并进行加密
+      const hasPlaintextPasswords = this.checkForPlaintextPasswords(config);
+      if (hasPlaintextPasswords) {
+        console.log("检测到明文密码，正在加密...");
+        config.groups = this.encryptPlaintextPasswords(config.groups);
+      }
+
       // 为导入的项目生成新的ID
       config.groups = this.regenerateIds(config.groups);
 
-      return { success: true, data: config, message: "导入成功" };
+      return {
+        success: true,
+        data: config,
+        message: hasPlaintextPasswords
+          ? "导入成功（已加密明文密码）"
+          : "导入成功",
+      };
     } catch (error) {
       console.error("导入连接配置失败:", error);
       return {
@@ -383,6 +580,108 @@ export class StorageService {
         } else {
           return encryptionService.decryptObject(child, ["password"]);
         }
+      }),
+    }));
+  }
+
+  /**
+   * 为导出解密密码（明文导出）
+   */
+  private decryptPasswordsForExport(
+    groups: ConnectionGroup[]
+  ): ConnectionGroup[] {
+    return groups.map((group) => ({
+      ...group,
+      children: group.children.map((child) => {
+        if (isConnectionGroup(child)) {
+          // 递归处理子分组
+          return this.decryptPasswordsForExport([child])[0];
+        } else if (isConnectionItem(child) && child.password) {
+          // 密码在loadConnections时已经被解密，直接使用明文密码
+          console.log("📋 导出连接密码:", {
+            connectionName: child.name,
+            hasPassword: !!child.password,
+            passwordLength: child.password?.length || 0,
+            passwordPreview: child.password ? "***" : "空",
+          });
+
+          return {
+            ...child,
+            password: child.password, // 直接使用已解密的密码
+          };
+        } else {
+          return child;
+        }
+      }),
+    }));
+  }
+
+  /**
+   * 检查配置是否包含明文密码
+   */
+  private checkForPlaintextPasswords(config: ConnectionConfig): boolean {
+    // 检查是否有导出信息标识
+    const exportInfo = (config as any).exportInfo;
+    if (exportInfo && exportInfo.passwordEncrypted === false) {
+      return true;
+    }
+
+    // 如果没有导出信息，尝试检测密码格式
+    // 加密的密码通常是Base64格式，明文密码通常不是
+    return this.hasPlaintextPasswordsInGroups(config.groups);
+  }
+
+  /**
+   * 检查分组中是否有明文密码
+   */
+  private hasPlaintextPasswordsInGroups(groups: ConnectionGroup[]): boolean {
+    for (const group of groups) {
+      for (const child of group.children) {
+        if (isConnectionGroup(child)) {
+          if (this.hasPlaintextPasswordsInGroups([child])) {
+            return true;
+          }
+        } else if (isConnectionItem(child) && child.password) {
+          // 简单检测：如果密码不像Base64编码，可能是明文
+          if (!this.looksLikeEncryptedPassword(child.password)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 检查密码是否看起来像加密的
+   */
+  private looksLikeEncryptedPassword(password: string): boolean {
+    // 加密的密码通常是Base64格式，长度较长且包含特定字符
+    const base64Regex = /^[A-Za-z0-9+/]+=*$/;
+    return password.length > 20 && base64Regex.test(password);
+  }
+
+  /**
+   * 加密明文密码
+   */
+  private encryptPlaintextPasswords(
+    groups: ConnectionGroup[]
+  ): ConnectionGroup[] {
+    return groups.map((group) => ({
+      ...group,
+      children: group.children.map((child) => {
+        if (isConnectionGroup(child)) {
+          return this.encryptPlaintextPasswords([child])[0];
+        } else if (isConnectionItem(child) && child.password) {
+          // 如果是明文密码，进行加密
+          if (!this.looksLikeEncryptedPassword(child.password)) {
+            return {
+              ...child,
+              password: encryptionService.encrypt(child.password),
+            };
+          }
+        }
+        return child;
       }),
     }));
   }

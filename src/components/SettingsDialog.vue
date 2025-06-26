@@ -95,6 +95,35 @@
                   placeholder="备份间隔"
                 />
               </el-form-item>
+
+              <el-divider content-position="left">数据导出</el-divider>
+
+              <el-form-item>
+                <div class="export-buttons">
+                  <el-button
+                    type="primary"
+                    :icon="Download"
+                    @click="exportWithPasswords"
+                    :loading="exporting"
+                  >
+                    导出配置（含密码）
+                  </el-button>
+                  <el-button
+                    type="default"
+                    :icon="Download"
+                    @click="exportWithoutPasswords"
+                    :loading="exporting"
+                  >
+                    导出配置（不含密码）
+                  </el-button>
+                </div>
+                <div class="export-note">
+                  <el-text type="info" size="small">
+                    • 含密码导出：包含明文密码，可在其他机器上直接导入使用<br />
+                    • 不含密码导出：仅导出连接信息，需要重新输入密码
+                  </el-text>
+                </div>
+              </el-form-item>
             </el-card>
           </el-form>
         </div>
@@ -167,7 +196,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted } from "vue";
 import { ElMessage } from "element-plus";
-import { Monitor } from "@element-plus/icons-vue";
+import { Monitor, Download } from "@element-plus/icons-vue";
 import ClientConfigManager from "./ClientConfigManager.vue";
 import PasswordRecovery from "./PasswordRecovery.vue";
 import { AppSettings } from "@/types/connection";
@@ -197,6 +226,7 @@ const emit = defineEmits<{
 // 响应式数据
 const activeTab = ref("clients");
 const saving = ref(false);
+const exporting = ref(false);
 const settings = reactive<AppSettings>({ ...DEFAULT_SETTINGS });
 
 // 生命周期
@@ -247,6 +277,156 @@ const handleSave = async () => {
 const handleClose = () => {
   emit("update:visible", false);
 };
+
+// 导出方法
+const exportWithPasswords = async () => {
+  exporting.value = true;
+  try {
+    // 加载当前连接配置
+    console.log("🔍 开始加载连接配置...");
+    const connectionsResult = await storageService.loadConnections();
+    console.log("📋 连接配置加载结果:", {
+      success: connectionsResult.success,
+      hasData: !!connectionsResult.data,
+      groupsCount: connectionsResult.data?.groups?.length || 0,
+      version: connectionsResult.data?.version,
+      error: connectionsResult.error,
+    });
+
+    if (!connectionsResult.success || !connectionsResult.data) {
+      console.error("❌ 加载连接配置失败:", connectionsResult.error);
+      ElMessage.error(
+        "加载连接配置失败: " + (connectionsResult.error || "未知错误")
+      );
+      return;
+    }
+
+    if (
+      !connectionsResult.data.groups ||
+      connectionsResult.data.groups.length === 0
+    ) {
+      console.warn("⚠️ 连接配置中没有分组数据");
+      ElMessage.warning("当前没有连接数据可以导出");
+      return;
+    }
+
+    // 生成默认文件名
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const defaultFileName = `connections-with-passwords-${timestamp}.json`;
+
+    // 选择保存路径
+    const savePathResult = await window.electronAPI?.selectSavePath(
+      defaultFileName,
+      [{ name: "JSON Files", extensions: ["json"] }]
+    );
+
+    console.log("文件对话框返回结果:", savePathResult);
+
+    if (!savePathResult || savePathResult.canceled) {
+      return; // 用户取消了选择
+    }
+
+    if (!savePathResult.filePath) {
+      ElMessage.error("未选择有效的保存路径");
+      return;
+    }
+
+    console.log("导出配置数据:", {
+      hasGroups: !!connectionsResult.data.groups,
+      groupsLength: connectionsResult.data.groups?.length,
+      version: connectionsResult.data.version,
+    });
+
+    // 导出包含密码的配置
+    const result = await storageService.exportConnectionsWithPasswords(
+      connectionsResult.data,
+      savePathResult.filePath
+    );
+
+    if (result.success) {
+      ElMessage.success(`导出成功！文件已保存到: ${savePathResult.filePath}`);
+    } else {
+      ElMessage.error("导出失败: " + result.error);
+    }
+  } catch (error) {
+    console.error("导出失败:", error);
+    ElMessage.error("导出失败");
+  } finally {
+    exporting.value = false;
+  }
+};
+
+const exportWithoutPasswords = async () => {
+  exporting.value = true;
+  try {
+    // 加载当前连接配置
+    console.log("🔍 开始加载连接配置（不含密码）...");
+    const connectionsResult = await storageService.loadConnections();
+    console.log("📋 连接配置加载结果（不含密码）:", {
+      success: connectionsResult.success,
+      hasData: !!connectionsResult.data,
+      groupsCount: connectionsResult.data?.groups?.length || 0,
+      version: connectionsResult.data?.version,
+      error: connectionsResult.error,
+    });
+
+    if (!connectionsResult.success || !connectionsResult.data) {
+      console.error("❌ 加载连接配置失败:", connectionsResult.error);
+      ElMessage.error(
+        "加载连接配置失败: " + (connectionsResult.error || "未知错误")
+      );
+      return;
+    }
+
+    if (
+      !connectionsResult.data.groups ||
+      connectionsResult.data.groups.length === 0
+    ) {
+      console.warn("⚠️ 连接配置中没有分组数据");
+      ElMessage.warning("当前没有连接数据可以导出");
+      return;
+    }
+
+    // 生成默认文件名
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const defaultFileName = `connections-no-passwords-${timestamp}.json`;
+
+    // 选择保存路径
+    const savePathResult = await window.electronAPI?.selectSavePath(
+      defaultFileName,
+      [{ name: "JSON Files", extensions: ["json"] }]
+    );
+
+    console.log("文件对话框返回结果:", savePathResult);
+
+    if (!savePathResult || savePathResult.canceled) {
+      return; // 用户取消了选择
+    }
+
+    if (!savePathResult.filePath) {
+      ElMessage.error("未选择有效的保存路径");
+      return;
+    }
+
+    // 导出不含密码的配置
+    const result = await storageService.exportConnections(
+      connectionsResult.data,
+      savePathResult.filePath,
+      false
+    );
+
+    if (result.success) {
+      ElMessage.success(`导出成功！文件已保存到: ${savePathResult.filePath}`);
+    } else {
+      ElMessage.error("导出失败: " + result.error);
+    }
+  } catch (error) {
+    console.error("导出失败:", error);
+    ElMessage.error("导出失败");
+  } finally {
+    exporting.value = false;
+  }
+};
 </script>
 
 <style scoped lang="scss">
@@ -257,6 +437,19 @@ const handleClose = () => {
     &:last-child {
       margin-bottom: 0;
     }
+  }
+
+  .export-buttons {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .export-note {
+    padding: 8px 12px;
+    background-color: #f5f7fa;
+    border-radius: 4px;
+    border-left: 3px solid #409eff;
   }
 }
 

@@ -198,9 +198,45 @@ function setupIpcHandlers() {
   // 读取文件
   ipcMain.handle("read-file", async (event, dir: string, fileName: string) => {
     try {
-      const filePath = dir ? nodePath.join(dir, fileName) : fileName;
-      return fs.readFileSync(filePath, "utf-8");
+      let filePath: string;
+
+      if (dir && dir.trim() !== "") {
+        // 如果dir是绝对路径，直接使用
+        if (nodePath.isAbsolute(dir)) {
+          filePath = nodePath.join(dir, fileName);
+        } else {
+          // 相对于用户数据目录
+          const userDataPath = app.getPath("userData");
+          filePath = nodePath.join(userDataPath, dir, fileName);
+        }
+      } else {
+        // dir为空，使用用户数据目录
+        const userDataPath = app.getPath("userData");
+        filePath = nodePath.join(userDataPath, fileName);
+      }
+
+      console.log("读取文件:", {
+        dir,
+        fileName,
+        filePath,
+        exists: fs.existsSync(filePath),
+      });
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      console.log("文件读取成功:", {
+        filePath,
+        contentLength: content.length,
+        contentPreview: content.substring(0, 100) + "...",
+      });
+
+      return content;
     } catch (error) {
+      console.error("文件读取失败:", {
+        dir,
+        fileName,
+        error: (error as Error).message,
+      });
+
       if ((error as any).code === "ENOENT") {
         return null; // 文件不存在
       }
@@ -213,10 +249,19 @@ function setupIpcHandlers() {
     "write-file",
     async (event, dir: string, fileName: string, data: string) => {
       try {
-        const userDataPath = app.getPath("userData");
-        const filePath = dir
-          ? nodePath.join(userDataPath, dir, fileName)
-          : nodePath.join(userDataPath, fileName);
+        let filePath: string;
+
+        // 如果dir是绝对路径，直接使用
+        if (nodePath.isAbsolute(dir)) {
+          filePath = nodePath.join(dir, fileName);
+        } else {
+          // 否则使用用户数据目录
+          const userDataPath = app.getPath("userData");
+          filePath = dir
+            ? nodePath.join(userDataPath, dir, fileName)
+            : nodePath.join(userDataPath, fileName);
+        }
+
         const dirPath = nodePath.dirname(filePath);
 
         console.log("写入文件:", {
@@ -272,12 +317,14 @@ function setupIpcHandlers() {
           filters: filters || [{ name: "All Files", extensions: ["*"] }],
         });
 
-        if (result.canceled) {
-          return null;
-        }
+        console.log("文件保存对话框结果:", result);
 
-        return result.filePath;
+        return {
+          filePath: result.filePath || "",
+          canceled: result.canceled,
+        };
       } catch (error) {
+        console.error("文件保存对话框错误:", error);
         throw error;
       }
     }

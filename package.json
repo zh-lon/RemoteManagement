@@ -1,7 +1,7 @@
 {
   "name": "remote-management",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "远程连接管理系统 - 支持RDP、SSH、VNC、FTP等多种远程连接协议的统一管理工具",
   "author": "Remote Management Team",
   "type": "module",
