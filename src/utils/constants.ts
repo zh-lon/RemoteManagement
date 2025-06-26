@@ -2,7 +2,7 @@ import { ConnectionType, AppSettings, ClientConfig } from "@/types/connection";
 
 // 应用常量
 export const APP_NAME = "远程管理系统";
-export const APP_VERSION = "1.1.1";
+export const APP_VERSION = "1.1.2";
 export const DATA_FILE_NAME = "connections.json";
 export const SETTINGS_FILE_NAME = "settings.json";
 export const BACKUP_DIR_NAME = "backups";
