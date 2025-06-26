@@ -194,7 +194,7 @@ export class ConnectionService {
 
       // 生成临时文件名
       const timestamp = Date.now();
-      const fileName = `temp_rdp_${timestamp}.rdp`;
+      const fileName = `${connection.name}.rdp`;
       console.log("生成RDP文件名:", fileName);
 
       // 构建RDP文件内容
