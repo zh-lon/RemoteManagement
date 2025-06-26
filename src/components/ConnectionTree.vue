@@ -53,6 +53,7 @@
               'is-group': isConnectionGroup(data),
               'is-selected': selectedNode?.id === data.id,
             }"
+            @dblclick="handleNodeDoubleClick(data)"
           >
             <div class="node-content">
               <!-- 层级连接线 -->
@@ -323,6 +324,13 @@ const handleNodeClick = (data: TreeNode) => {
   emit("nodeSelect", data);
 };
 
+const handleNodeDoubleClick = (data: TreeNode) => {
+  // 如果双击的是连接项，直接进行连接
+  if (isConnectionItem(data)) {
+    handleConnect(data);
+  }
+};
+
 const handleConnect = async (connection: ConnectionItem) => {
   connectingItems.value.add(connection.id);
   try {
@@ -520,6 +528,7 @@ onUnmounted(() => {
   flex: 1;
   overflow: auto;
   padding: 8px;
+  user-select: none;
 }
 
 .tree-node {
@@ -528,6 +537,7 @@ onUnmounted(() => {
   justify-content: space-between;
   width: 100%;
   padding: 1px 0;
+  user-select: none;
 
   .node-content {
     display: flex;
