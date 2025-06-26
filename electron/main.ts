@@ -297,12 +297,14 @@ function setupIpcHandlers() {
         filters: filters || [{ name: "All Files", extensions: ["*"] }],
       });
 
-      if (result.canceled) {
-        return null;
-      }
+      console.log("文件选择对话框结果:", result);
 
-      return result.filePaths[0];
+      return {
+        filePaths: result.filePaths || [],
+        canceled: result.canceled,
+      };
     } catch (error) {
+      console.error("文件选择对话框错误:", error);
       throw error;
     }
   });

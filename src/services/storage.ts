@@ -4,6 +4,8 @@ import {
   ConnectionGroup,
   AppSettings,
   OperationResult,
+  ConflictInfo,
+  MergeResult,
   isConnectionGroup,
   isConnectionItem,
 } from "@/types/connection";
@@ -14,6 +16,7 @@ import {
   SETTINGS_FILE_NAME,
   APP_VERSION,
 } from "@/utils/constants";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * 本地数据存储服务
@@ -480,55 +483,6 @@ export class StorageService {
   }
 
   /**
-   * 导入连接配置
-   */
-  public async importConnections(
-    filePath: string
-  ): Promise<OperationResult<ConnectionConfig>> {
-    try {
-      let data: string;
-
-      // 读取导入文件
-      if (!window.electronAPI) {
-        throw new Error("Electron API 不可用");
-      }
-      data = await window.electronAPI.readFile("", filePath);
-
-      const config: ConnectionConfig = JSON.parse(data);
-
-      // 验证配置格式
-      if (!this.validateConfig(config)) {
-        return { success: false, error: "配置文件格式无效" };
-      }
-
-      // 检查是否包含明文密码并进行加密
-      const hasPlaintextPasswords = this.checkForPlaintextPasswords(config);
-      if (hasPlaintextPasswords) {
-        console.log("检测到明文密码，正在加密...");
-        config.groups = this.encryptPlaintextPasswords(config.groups);
-      }
-
-      // 为导入的项目生成新的ID
-      config.groups = this.regenerateIds(config.groups);
-
-      return {
-        success: true,
-        data: config,
-        message: hasPlaintextPasswords
-          ? "导入成功（已加密明文密码）"
-          : "导入成功",
-      };
-    } catch (error) {
-      console.error("导入连接配置失败:", error);
-      return {
-        success: false,
-        error: "导入连接配置失败",
-        message: error instanceof Error ? error.message : "未知错误",
-      };
-    }
-  }
-
-  /**
    * 创建备份
    */
   public async createBackup(): Promise<OperationResult> {
@@ -578,7 +532,25 @@ export class StorageService {
         if (isConnectionGroup(child)) {
           return this.decryptGroups([child])[0];
         } else {
-          return encryptionService.decryptObject(child, ["password"]);
+          console.log("🔍 解密连接项:", {
+            name: child.name,
+            hasPassword: !!child.password,
+            passwordLength: child.password?.length || 0,
+            passwordPreview: child.password?.substring(0, 10) + "...",
+          });
+
+          const decrypted = encryptionService.decryptObject(child, [
+            "password",
+          ]);
+
+          console.log("🔓 解密结果:", {
+            name: decrypted.name,
+            hasPassword: !!decrypted.password,
+            passwordLength: decrypted.password?.length || 0,
+            passwordPreview: decrypted.password ? "***" : "无",
+          });
+
+          return decrypted;
         }
       }),
     }));
@@ -614,6 +586,304 @@ export class StorageService {
         }
       }),
     }));
+  }
+
+  /**
+   * 导入连接配置
+   */
+  public async importConnections(
+    filePath: string
+  ): Promise<OperationResult<{ conflicts: ConflictInfo[]; imported: number }>> {
+    try {
+      console.log("📥 开始导入连接配置:", filePath);
+
+      // 读取导入文件
+      if (!window.electronAPI) {
+        throw new Error("Electron API 不可用");
+      }
+
+      // 分离目录和文件名
+      const lastSlashIndex = Math.max(
+        filePath.lastIndexOf("/"),
+        filePath.lastIndexOf("\\")
+      );
+      const fileName =
+        lastSlashIndex >= 0 ? filePath.substring(lastSlashIndex + 1) : filePath;
+      const dirPath =
+        lastSlashIndex >= 0 ? filePath.substring(0, lastSlashIndex) : "";
+
+      console.log("📄 读取导入文件:", { filePath, dirPath, fileName });
+
+      const importData = await window.electronAPI.readFile(dirPath, fileName);
+      if (!importData) {
+        throw new Error("无法读取导入文件");
+      }
+
+      // 解析导入数据
+      const importConfig = JSON.parse(importData);
+      console.log("📋 导入配置解析:", {
+        version: importConfig.version,
+        groupsCount: importConfig.groups?.length || 0,
+        hasExportInfo: !!importConfig.exportInfo,
+      });
+
+      // 验证导入数据格式
+      if (!importConfig.groups || !Array.isArray(importConfig.groups)) {
+        throw new Error("导入文件格式不正确：缺少groups数组");
+      }
+
+      // 加载当前配置
+      const currentResult = await this.loadConnections();
+      if (!currentResult.success || !currentResult.data) {
+        throw new Error("无法加载当前配置");
+      }
+
+      // 合并配置并检测冲突
+      const mergeResult = this.mergeConfigurations(
+        currentResult.data,
+        importConfig
+      );
+
+      console.log("🔄 配置合并结果:", {
+        conflictsCount: mergeResult.conflicts.length,
+        importedCount: mergeResult.imported,
+        conflicts: mergeResult.conflicts.map((c) => ({
+          type: c.type,
+          name: c.existing.name,
+          action: c.action,
+        })),
+      });
+
+      // 保存合并后的配置
+      const saveResult = await this.saveConnections(mergeResult.mergedConfig);
+      if (!saveResult.success) {
+        throw new Error("保存合并配置失败: " + saveResult.error);
+      }
+
+      console.log("✅ 连接配置导入成功");
+      return {
+        success: true,
+        data: {
+          conflicts: mergeResult.conflicts,
+          imported: mergeResult.imported,
+        },
+      };
+    } catch (error) {
+      console.error("❌ 导入连接配置失败:", error);
+      return {
+        success: false,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * 合并两个配置，检测并处理冲突
+   */
+  private mergeConfigurations(
+    currentConfig: ConnectionConfig,
+    importConfig: any
+  ): MergeResult {
+    const conflicts: ConflictInfo[] = [];
+    let imported = 0;
+
+    // 创建合并后的配置副本
+    const mergedConfig: ConnectionConfig = {
+      ...currentConfig,
+      groups: [...currentConfig.groups],
+    };
+
+    // 处理导入的分组
+    for (const importGroup of importConfig.groups) {
+      const result = this.mergeGroup(mergedConfig.groups, importGroup, "");
+      conflicts.push(...result.conflicts);
+      imported += result.imported;
+    }
+
+    return {
+      mergedConfig,
+      conflicts,
+      imported,
+    };
+  }
+
+  /**
+   * 合并分组
+   */
+  private mergeGroup(
+    targetGroups: ConnectionGroup[],
+    importGroup: any,
+    parentPath: string
+  ): MergeResult {
+    const conflicts: ConflictInfo[] = [];
+    let imported = 0;
+
+    const groupPath = parentPath
+      ? `${parentPath}/${importGroup.name}`
+      : importGroup.name;
+
+    // 检查分组是否已存在
+    const existingGroup = targetGroups.find((g) => g.name === importGroup.name);
+
+    if (existingGroup) {
+      // 分组已存在，合并子项
+      console.log(`📁 分组已存在，合并子项: ${groupPath}`);
+
+      for (const child of importGroup.children || []) {
+        if (isConnectionGroup(child)) {
+          // 递归处理子分组
+          const result = this.mergeGroup(
+            existingGroup.children as ConnectionGroup[],
+            child,
+            groupPath
+          );
+          conflicts.push(...result.conflicts);
+          imported += result.imported;
+        } else {
+          // 处理连接项
+          const result = this.mergeConnection(existingGroup, child, groupPath);
+          if (result.conflict) {
+            conflicts.push(result.conflict);
+          }
+          if (result.imported) {
+            imported++;
+          }
+        }
+      }
+    } else {
+      // 新分组，直接添加
+      console.log(`📁 添加新分组: ${groupPath}`);
+
+      const newGroup: ConnectionGroup = {
+        id: uuidv4(),
+        name: importGroup.name,
+        children: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // 处理分组中的子项
+      for (const child of importGroup.children || []) {
+        if (isConnectionGroup(child)) {
+          // 递归处理子分组
+          const childGroup: ConnectionGroup = {
+            id: uuidv4(),
+            name: child.name,
+            children: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          newGroup.children.push(childGroup);
+
+          const result = this.mergeGroup([childGroup], child, groupPath);
+          conflicts.push(...result.conflicts);
+          imported += result.imported;
+        } else {
+          // 添加连接项
+          const newConnection: ConnectionItem = {
+            ...child,
+            id: uuidv4(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          // 密码处理：保持明文状态，让saveConnections统一加密
+          if (child.password) {
+            if (!encryptionService.isPasswordEncrypted(child.password)) {
+              console.log("📝 保持明文密码:", {
+                connectionName: child.name,
+                passwordLength: child.password.length,
+              });
+              newConnection.password = child.password; // 保持明文
+            } else {
+              console.log("🔓 解密已加密密码:", {
+                connectionName: child.name,
+                passwordLength: child.password.length,
+              });
+              // 如果是加密密码，先解密为明文
+              newConnection.password = encryptionService.decrypt(
+                child.password
+              );
+            }
+          }
+
+          newGroup.children.push(newConnection);
+          imported++;
+        }
+      }
+
+      targetGroups.push(newGroup);
+      imported++; // 分组本身也算导入项
+    }
+
+    return { mergedConfig: null as any, conflicts, imported };
+  }
+
+  /**
+   * 合并连接项
+   */
+  private mergeConnection(
+    targetGroup: ConnectionGroup,
+    importConnection: any,
+    groupPath: string
+  ): { conflict?: ConflictInfo; imported: boolean } {
+    const connectionPath = `${groupPath}/${importConnection.name}`;
+
+    // 检查连接是否已存在（按名称和主机）
+    const existingConnection = targetGroup.children.find(
+      (child) =>
+        !isConnectionGroup(child) &&
+        child.name === importConnection.name &&
+        child.host === importConnection.host
+    ) as ConnectionItem;
+
+    if (existingConnection) {
+      // 连接已存在，创建冲突信息
+      console.log(`⚠️ 连接冲突: ${connectionPath}`);
+
+      const conflict: ConflictInfo = {
+        type: "connection",
+        path: connectionPath,
+        existing: existingConnection,
+        imported: importConnection,
+        action: "skip", // 默认跳过
+      };
+
+      return { conflict, imported: false };
+    } else {
+      // 新连接，直接添加
+      console.log(`🔗 添加新连接: ${connectionPath}`);
+
+      const newConnection: ConnectionItem = {
+        ...importConnection,
+        id: uuidv4(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // 密码处理：保持明文状态，让saveConnections统一加密
+      if (importConnection.password) {
+        if (!encryptionService.isPasswordEncrypted(importConnection.password)) {
+          console.log("📝 保持明文密码:", {
+            connectionName: importConnection.name,
+            passwordLength: importConnection.password.length,
+          });
+          newConnection.password = importConnection.password; // 保持明文
+        } else {
+          console.log("🔓 解密已加密密码:", {
+            connectionName: importConnection.name,
+            passwordLength: importConnection.password.length,
+          });
+          // 如果是加密密码，先解密为明文
+          newConnection.password = encryptionService.decrypt(
+            importConnection.password
+          );
+        }
+      }
+
+      targetGroup.children.push(newConnection);
+      return { imported: true };
+    }
   }
 
   /**

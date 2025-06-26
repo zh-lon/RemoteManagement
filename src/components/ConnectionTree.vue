@@ -24,6 +24,11 @@
           <el-icon><Plus /></el-icon>
           新建连接
         </el-button>
+
+        <el-button type="info" size="small" @click="handleImportConnections">
+          <el-icon><Upload /></el-icon>
+          导入配置
+        </el-button>
       </div>
     </div>
 
@@ -188,6 +193,7 @@ import {
   Search,
   FolderAdd,
   Plus,
+  Upload,
   Connection,
   MoreFilled,
   Edit,
@@ -229,6 +235,7 @@ const emit = defineEmits<{
   deleteNode: [node: TreeNode];
   connectToHost: [connection: ConnectionItem];
   testConnection: [connection: ConnectionItem];
+  importConnections: [];
 }>();
 
 // 响应式数据
@@ -364,6 +371,10 @@ const handleAddGroup = () => {
 
 const handleAddConnection = () => {
   emit("addConnection");
+};
+
+const handleImportConnections = () => {
+  emit("importConnections");
 };
 
 const handleContextMenu = (event: MouseEvent, data: TreeNode) => {

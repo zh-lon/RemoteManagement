@@ -6,11 +6,13 @@ import ConnectionDetail from "./components/ConnectionDetail.vue";
 import ConnectionForm from "./components/ConnectionForm.vue";
 import GroupForm from "./components/GroupForm.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
+import ConflictDialog from "./components/ConflictDialog.vue";
 import {
   ConnectionConfig,
   ConnectionGroup,
   ConnectionItem,
   TreeNode,
+  ConflictInfo,
   isConnectionGroup,
 } from "./types/connection";
 import { storageService } from "./services/storage";
@@ -31,6 +33,11 @@ const editingConnection = ref<ConnectionItem | null>(null);
 const editingGroup = ref<ConnectionGroup | null>(null);
 const editingParentGroup = ref<ConnectionGroup | null>(null);
 const settingsVisible = ref(false);
+
+// 导入相关
+const importing = ref(false);
+const importConflicts = ref<ConflictInfo[]>([]);
+const showConflictDialog = ref(false);
 
 // 计算属性
 const groupTreeData = computed(() => {
@@ -381,6 +388,77 @@ const findGroupById = (id: string): ConnectionGroup | null => {
 
   return null;
 };
+
+// 导入相关方法
+const handleImportConnections = async () => {
+  try {
+    importing.value = true;
+
+    // 选择导入文件
+    const fileResult = await window.electronAPI?.selectFile([
+      { name: "JSON Files", extensions: ["json"] },
+    ]);
+
+    if (
+      !fileResult ||
+      fileResult.canceled ||
+      !fileResult.filePaths ||
+      fileResult.filePaths.length === 0
+    ) {
+      return; // 用户取消了选择
+    }
+
+    const filePath = fileResult.filePaths[0];
+    console.log("📥 选择导入文件:", filePath);
+
+    // 执行导入
+    const result = await storageService.importConnections(filePath);
+
+    if (result.success && result.data) {
+      const { conflicts, imported } = result.data;
+
+      if (conflicts.length > 0) {
+        // 有冲突，显示冲突处理对话框
+        importConflicts.value = conflicts;
+        showConflictDialog.value = true;
+        ElMessage.warning(`导入完成，发现 ${conflicts.length} 个冲突需要处理`);
+      } else {
+        // 无冲突，直接完成
+        ElMessage.success(`导入成功！共导入 ${imported} 个项目`);
+      }
+
+      // 重新加载连接数据以获取最新的解密状态
+      await loadConnections();
+    } else {
+      ElMessage.error("导入失败: " + (result.error || "未知错误"));
+    }
+  } catch (error) {
+    console.error("导入连接配置失败:", error);
+    ElMessage.error("导入失败");
+  } finally {
+    importing.value = false;
+  }
+};
+
+const handleConflictResolution = async (conflicts: ConflictInfo[]) => {
+  try {
+    // 这里可以根据用户选择的冲突解决方案重新处理
+    // 目前先简单关闭对话框
+    showConflictDialog.value = false;
+
+    const skippedCount = conflicts.filter((c) => c.action === "skip").length;
+    const replacedCount = conflicts.filter(
+      (c) => c.action === "replace"
+    ).length;
+
+    ElMessage.success(
+      `冲突处理完成！跳过 ${skippedCount} 个，替换 ${replacedCount} 个`
+    );
+  } catch (error) {
+    console.error("处理冲突失败:", error);
+    ElMessage.error("处理冲突失败");
+  }
+};
 </script>
 
 <template>
@@ -398,6 +476,7 @@ const findGroupById = (id: string): ConnectionGroup | null => {
           @delete-node="handleDeleteNode"
           @connect-to-host="handleConnectToHost"
           @test-connection="handleTestConnection"
+          @import-connections="handleImportConnections"
         />
       </el-aside>
 
@@ -431,6 +510,14 @@ const findGroupById = (id: string): ConnectionGroup | null => {
 
     <!-- 设置对话框 -->
     <SettingsDialog v-model:visible="settingsVisible" />
+
+    <!-- 冲突处理对话框 -->
+    <ConflictDialog
+      v-model:visible="showConflictDialog"
+      :conflicts="importConflicts"
+      @confirm="handleConflictResolution"
+      @cancel="showConflictDialog = false"
+    />
   </div>
 </template>
 

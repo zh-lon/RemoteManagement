@@ -177,13 +177,17 @@ export class EncryptionService {
         if (this.isEncryptedData(fieldValue)) {
           try {
             console.log(
-              `开始解密字段 ${String(field)}，加密值长度: ${fieldValue.length}`
+              `开始解密字段 ${String(field)}，加密值长度: ${
+                fieldValue.length
+              }，加密值预览: ${fieldValue.substring(0, 20)}...`
             );
             const decrypted = this.decrypt(fieldValue);
             console.log(
               `解密字段 ${String(field)} 成功，解密后长度: ${
                 decrypted.length
-              }，内容: ${decrypted ? "***" : "(空)"}`
+              }，解密后预览: ${decrypted.substring(0, 10)}...，内容: ${
+                decrypted ? "***" : "(空)"
+              }`
             );
             result[field] = decrypted as T[keyof T];
           } catch (error) {
@@ -192,17 +196,40 @@ export class EncryptionService {
             result[field] = "" as T[keyof T];
           }
         } else {
-          // 如果不是加密数据，保持原值（可能是明文密码）
-          console.log(
-            `字段 ${String(field)} 不是加密数据，原值长度: ${
-              fieldValue.length
-            }，保持原值`
-          );
+          // 如果不是加密数据，检查是否是错误的加密字符串
+          if (
+            field === "password" &&
+            fieldValue.length > 10 &&
+            /^[A-Za-z0-9+/=]+$/.test(fieldValue)
+          ) {
+            console.warn(
+              `字段 ${String(field)} 疑似错误的加密字符串，长度: ${
+                fieldValue.length
+              }，清空处理`
+            );
+            result[field] = "" as T[keyof T];
+          } else {
+            // 如果不是加密数据，保持原值（可能是明文密码）
+            console.log(
+              `字段 ${String(field)} 不是加密数据，原值长度: ${
+                fieldValue.length
+              }，保持原值`
+            );
+          }
         }
       }
     }
 
     return result;
+  }
+
+  /**
+   * 检查密码是否已加密
+   * @param password 要检查的密码
+   * @returns 是否已加密
+   */
+  public isPasswordEncrypted(password: string): boolean {
+    return this.isEncryptedData(password);
   }
 
   /**

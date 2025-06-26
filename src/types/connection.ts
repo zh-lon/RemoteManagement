@@ -189,6 +189,21 @@ export interface OperationResult<T = any> {
   message?: string;
 }
 
+// 导入相关类型
+export interface ConflictInfo {
+  type: "connection" | "group";
+  path: string;
+  existing: ConnectionItem | ConnectionGroup;
+  imported: any;
+  action: "skip" | "replace" | "rename";
+}
+
+export interface MergeResult {
+  mergedConfig: ConnectionConfig;
+  conflicts: ConflictInfo[];
+  imported: number;
+}
+
 // 连接测试结果
 export interface ConnectionTestResult {
   success: boolean;
