@@ -44,10 +44,28 @@
         node-key="id"
         @node-click="handleNodeClick"
         @node-contextmenu="handleContextMenu"
+        :current-node-key="selectedNode?.id"
       >
         <template #default="{ node, data }">
-          <div class="tree-node">
+          <div
+            class="tree-node"
+            :class="{
+              'is-group': isConnectionGroup(data),
+              'is-selected': selectedNode?.id === data.id,
+            }"
+          >
             <div class="node-content">
+              <!-- 层级连接线 -->
+              <div class="level-lines" v-if="node.level > 1">
+                <div
+                  class="level-line"
+                  v-for="i in node.level - 1"
+                  :key="i"
+                  :class="{ 'has-sibling': hasNextSibling(node, i) }"
+                ></div>
+                <div class="node-connector"></div>
+              </div>
+
               <!-- 图标 -->
               <el-icon class="node-icon" :class="getNodeIconClass(data)">
                 <component :is="getNodeIcon(data)" />
@@ -377,6 +395,25 @@ const handleImportConnections = () => {
   emit("importConnections");
 };
 
+// 判断节点在指定层级是否有下一个兄弟节点
+const hasNextSibling = (node: any, level: number): boolean => {
+  let currentNode = node;
+
+  // 向上遍历到指定层级
+  for (let i = node.level; i > level; i--) {
+    currentNode = currentNode.parent;
+  }
+
+  if (!currentNode || !currentNode.parent) {
+    return false;
+  }
+
+  const siblings = currentNode.parent.childNodes;
+  const currentIndex = siblings.indexOf(currentNode);
+
+  return currentIndex < siblings.length - 1;
+};
+
 const handleContextMenu = (event: MouseEvent, data: TreeNode) => {
   event.preventDefault();
   contextMenuData.value = data;
@@ -490,16 +527,70 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 4px 0;
+  padding: 1px 0;
 
   .node-content {
     display: flex;
     align-items: center;
     flex: 1;
     min-width: 0;
+    position: relative;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+
+    .level-lines {
+      display: flex;
+      align-items: center;
+      margin-right: 2px;
+
+      .level-line {
+        width: 16px;
+        height: 18px;
+        position: relative;
+        flex-shrink: 0;
+
+        &.has-sibling::before {
+          content: "";
+          position: absolute;
+          left: 8px;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          background: #dcdfe6;
+        }
+      }
+
+      .node-connector {
+        position: relative;
+        width: 12px;
+        height: 18px;
+        flex-shrink: 0;
+
+        &::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 50%;
+          width: 1px;
+          background: #dcdfe6;
+        }
+
+        &::after {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 50%;
+          width: 12px;
+          height: 1px;
+          background: #dcdfe6;
+        }
+      }
+    }
 
     .node-icon {
-      margin-right: 8px;
+      margin-right: 6px;
       font-size: 16px;
 
       &.group-icon {
@@ -573,6 +664,57 @@ onUnmounted(() => {
   &:hover .node-actions {
     opacity: 1;
   }
+
+  // 分组节点样式
+  &.is-group {
+    .node-content {
+      &:hover {
+        background-color: #f5f7fa;
+      }
+    }
+
+    .node-label {
+      font-weight: 600;
+      color: #303133;
+      font-size: 14px;
+    }
+
+    .node-icon {
+      color: #409eff;
+      font-size: 16px;
+    }
+  }
+
+  // 连接节点样式
+  &:not(.is-group) {
+    .node-content {
+      &:hover {
+        background-color: #f5f7fa;
+      }
+    }
+
+    .node-label {
+      color: #606266;
+      font-size: 14px;
+    }
+
+    .node-icon {
+      font-size: 14px;
+    }
+  }
+
+  // 选中状态样式
+  &.is-selected {
+    .node-content {
+      background-color: #e6f7ff;
+      border-left: 3px solid #409eff;
+    }
+
+    .node-label {
+      color: #409eff;
+      font-weight: 600;
+    }
+  }
 }
 
 .context-menu {
@@ -585,12 +727,37 @@ onUnmounted(() => {
   min-width: 120px;
 }
 
+// Element Plus 树形组件样式覆盖
+:deep(.el-tree) {
+  background: transparent;
+}
+
 :deep(.el-tree-node__content) {
   height: auto;
-  padding: 4px 0;
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+
+  &:hover {
+    background: transparent !important;
+  }
+
+  &.is-current {
+    background: transparent !important;
+  }
 }
 
 :deep(.el-tree-node__expand-icon) {
-  color: #409eff;
+  color: #909399;
+  font-size: 12px;
+  margin-right: 2px;
+
+  &:hover {
+    color: #409eff;
+  }
+
+  &.is-leaf {
+    color: transparent;
+  }
 }
 </style>

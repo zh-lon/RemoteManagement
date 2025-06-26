@@ -10,6 +10,14 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-electron
+bundles
+*.sublime-project
+*.sublime-workspace
+
+# Environment files
+.env
+.env.local
 *.local
 release
 
